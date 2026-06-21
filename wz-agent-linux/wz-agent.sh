@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-WAZUH_MANAGER="172.25.33.50"
+WAZUH_MANAGER="172.25.33.2"
 
 clear
 
