@@ -1,12 +1,16 @@
 #!/bin/bash
 # ==============================================================================
 # Wazuh YARA Automated Installation, Configuration and Rules Update Script
-# PULLS RULES FROM LOCAL REPO (10.3.11.48)
-# Compatible for Ubuntu/Debian VMs
+# AGENT-SIDE installer for Ubuntu/Debian Linux agents.
+# Manager-side config lives in yara/manager/ (apply once on the manager).
 # Author: Ye Kyaw Han , Hsu Sandy Thein
 # ==============================================================================
 
 set -e # Exit immediately if a command exits with a non-zero status
+
+# All YARA rules are pulled from our GitHub repo (yara/rule-collection/:
+# our own rules + vendored community signatures) by the updater script below.
+REPO_RAW="https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/yara"
 
 # ==============================================================================
 # Setup Logging
@@ -25,23 +29,23 @@ fi
 echo "[*] Updating apt repositories and installing dependencies..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-# Added 'jq' as it is required by the Active Response script
+# 'jq' is required by the Active Response script
 apt-get install -y make gcc autoconf libtool libssl-dev pkg-config jq curl wget
 
 # Check if YARA is already installed to prevent re-compiling on subsequent runs
 if ! command -v yara &> /dev/null; then
     echo "[*] YARA not found. Downloading and compiling from source..."
-    cd /usr/local/bin/
+    mkdir -p /usr/local/src && cd /usr/local/src/
     curl -LO https://github.com/VirusTotal/yara/archive/v4.5.5.tar.gz
-    tar -xvzf v4.5.5.tar.gz
+    tar -xzf v4.5.5.tar.gz
     rm -f v4.5.5.tar.gz
-    
+
     cd yara-4.5.5/
     ./bootstrap.sh
     ./configure
     make
     make install
-    
+
     echo "[*] Applying shared library fix (ldconfig)..."
     if ! grep -q "/usr/local/lib" /etc/ld.so.conf; then
         echo "/usr/local/lib" >> /etc/ld.so.conf
@@ -51,12 +55,12 @@ else
     echo "[+] YARA is already installed. Skipping compilation."
 fi
 
-echo "[*] Downloading initial YARA rules from LOCAL SERVER (10.3.11.48)..."
-RULES_DIR="/var/ossec/yara/rules"
-mkdir -p "$RULES_DIR"
-
-# Pull from Local Server instead of Internet
-curl -sL "https://github.com/yekyawhan/wazuh/tree/git-home/yara/rulle-collection" -o "$RULES_DIR"
+echo "[*] Installing rules updater (own rules + signature-base) and running initial update..."
+curl -fsSL "$REPO_RAW/update-yara-rules.sh" -o /usr/local/bin/update-yara-rules.sh
+chmod +x /usr/local/bin/update-yara-rules.sh
+/usr/local/bin/update-yara-rules.sh
+[ -f /var/ossec/yara/rules/index.yar ] || { echo "[-] index.yar was not built, aborting."; exit 1; }
+echo "[+] Rules installed: /var/ossec/yara/rules/index.yar"
 
 echo "[*] Creating Wazuh Active Response script (/var/ossec/active-response/bin/yara.sh)..."
 mkdir -p /var/ossec/active-response/bin/
@@ -92,19 +96,39 @@ if [[ ! $YARA_PATH ]] || [[ ! $YARA_RULES ]]; then
 fi
 
 #------------------------- Main workflow --------------------------#
+# Never scan or quarantine inside our own quarantine directory (loop guard)
+case "${FILENAME}" in
+  ${QUARANTINE_DIR}/*) exit 0 ;;
+esac
+
 # Execute Yara scan on the specified filename (Check if file still exists)
 if [ -f "${FILENAME}" ]; then
-  yara_output="$("${YARA_PATH}"/yara -w -r "$YARA_RULES" "$FILENAME")"
+  # Prefer the precompiled binary ruleset (-C) so we don't recompile every scan.
+  # Fall back to the text index if the .yarc isn't present yet.
+  COMPILED_RULES="${YARA_RULES%.yar}.yarc"
+  if [ -f "${COMPILED_RULES}" ]; then
+    RULES_ARG=(-C "${COMPILED_RULES}")
+  else
+    RULES_ARG=("${YARA_RULES}")
+  fi
+  # -d defines external vars used by signature-base rules (THOR/Loki convention)
+  yara_output="$("${YARA_PATH}"/yara -w -r \
+      -d filename="$(basename "$FILENAME")" \
+      -d filepath="$FILENAME" \
+      -d extension="${FILENAME##*.}" \
+      -d filetype="" -d owner="" \
+      "${RULES_ARG[@]}" "$FILENAME")"
   if [[ $yara_output != "" ]]; then
     # Iterate every detected rule and append it to the LOG_FILE
     while read -r line; do
       echo "wazuh-yara: INFO - Scan result: $line" >> ${LOG_FILE}
     done <<< "$yara_output"
-    
+
     # ------------------ QUARANTINE ------------------#
     mkdir -p ${QUARANTINE_DIR}
     BASENAME=$(basename "$FILENAME")
     mv "$FILENAME" "${QUARANTINE_DIR}/${BASENAME}"
+    chmod 000 "${QUARANTINE_DIR}/${BASENAME}"
     echo "wazuh-yara: ACTION - File quarantined: ${QUARANTINE_DIR}/${BASENAME}" >> ${LOG_FILE}
   fi
 fi
@@ -118,29 +142,34 @@ mkdir -p /var/ossec/active-response/quarantine
 chmod 750 /var/ossec/active-response/quarantine
 chown root:wazuh /var/ossec/active-response/quarantine
 
-echo "[*] Setting up YARA rules auto-update script (Pulling from 10.3.11.48) and Weekly Cronjob..."
-cat << 'EOF' > /usr/local/bin/update-yara-rules.sh
-#!/bin/bash
-# Script to update YARA rules from LOCAL SERVER (10.3.11.48)
-RULES_DIR="/var/ossec/yara/rules"
-mkdir -p "$RULES_DIR"
+# Realtime FIM on the dirs where malware lands, so a dropped file fires manager
+# rule 108000 -> yara_linux AR. Default NO: FIM is managed centrally via the
+# shared agent config (agent/linux-client.xml). Run with YARA_FIM_LOCAL=yes to
+# have the installer edit this agent's local ossec.conf instead.
+YARA_FIM_LOCAL="${YARA_FIM_LOCAL:-no}"
+OSSEC_CONF="/var/ossec/etc/ossec.conf"
+if [ "$YARA_FIM_LOCAL" = "yes" ]; then
+    echo "[*] Ensuring FIM realtime monitoring of /tmp,/media,/root in agent ossec.conf..."
+    if ! grep -q 'realtime="yes">/tmp,/media,/root' "$OSSEC_CONF"; then
+        cp "$OSSEC_CONF" "${OSSEC_CONF}.bak.$(date +%s)"
+        sed -i '0,\|</syscheck>|s||  <directories realtime="yes">/tmp,/media,/root</directories>\n</syscheck>|' "$OSSEC_CONF"
+        echo "[+] FIM directories added (backup of ossec.conf saved)."
+    else
+        echo "[+] FIM directories already configured."
+    fi
+else
+    echo "[*] Skipping local FIM edit - managed centrally via linux-client.xml (run with YARA_FIM_LOCAL=yes to edit local ossec.conf)."
+fi
 
-echo "[$(date)] Updating YARA rules from local server..." >> /var/log/yara-update.log
-
-curl -sL "http://10.3.11.48/rules/yara_rules.yar" -o "$RULES_DIR/yara_rules.yar"
-
-# Restart Wazuh Agent to properly load new rules into memory
-echo "[$(date)] Restarting Wazuh agent..." >> /var/log/yara-update.log
-systemctl restart wazuh-agent
-echo "[$(date)] YARA rules updated and agent restarted successfully." >> /var/log/yara-update.log
-EOF
-
-chmod +x /usr/local/bin/update-yara-rules.sh
-
-# Add cron job to update automatically at 11:30 PM every Sunday (Weekly)
-(crontab -l 2>/dev/null | grep -v "/usr/local/bin/update-yara-rules.sh" ; echo "30 23 * * 0 /usr/local/bin/update-yara-rules.sh") | crontab -
+echo "[*] Setting up Daily rules-update Cronjob (1:15 PM)..."
+(crontab -l 2>/dev/null | grep -v "/usr/local/bin/update-yara-rules.sh" ; echo "15 13 * * * /usr/local/bin/update-yara-rules.sh") | crontab -
 
 # Add cron job to clean up quarantine directory (files older than 30 days) daily at 1:00 AM
 (crontab -l 2>/dev/null | grep -v "/var/ossec/active-response/quarantine" ; echo "0 1 * * * find /var/ossec/active-response/quarantine -type f -mtime +30 -delete") | crontab -
 
+echo "[*] Restarting Wazuh agent to apply FIM config..."
+systemctl restart wazuh-agent || echo "[-] wazuh-agent restart failed (is the agent installed?)"
+
 echo "[+] Local YARA installation, Active Response, Quarantine Cleanup and Auto-Update configured successfully!"
+echo "[!] REMINDER: on the Wazuh MANAGER append manager/local_rules_yara.xml (rules 108000-108002) to local_rules.xml and add the yara_linux command/active-response from manager/ossec-conf-ar-snippet.xml, then restart wazuh-manager, or nothing will trigger."
+echo "[!] If FIM is managed centrally, push agent/linux-client.xml to the group and run this installer with YARA_FIM_LOCAL=no."
