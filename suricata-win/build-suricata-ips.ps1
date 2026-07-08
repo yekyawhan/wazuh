@@ -538,10 +538,23 @@ function Get-EtOpenRuleset([string]$suricataExe, [string]$destPath, [string]$wor
 }
 function Get-AgbBlackDropRuleset([string]$destPath) {
     $tmpPath = "$env:TEMP\agb-black-source.rules"
+    $text = $null
     try {
         Invoke-WebRequest -Uri "$RepoRawBase/agb-black.rules" -OutFile $tmpPath -UseBasicParsing
-    } catch { return $false }
-    $text = [IO.File]::ReadAllText($tmpPath)
+        $text = [IO.File]::ReadAllText($tmpPath)
+    } catch {
+        # FALLBACK: if the download fails (e.g. GitHub 429-rate-limiting the
+        # raw endpoint after heavy use) AND this script is being run from a
+        # local repo clone, use the agb-black.rules sitting next to it. Lets
+        # a local-file run (powershell -File ...\build-suricata-ips.ps1)
+        # still produce a fully-blocking build while GitHub is throttled.
+        # $PSScriptRoot is empty on an iwr|iex run, so this only helps the
+        # local-file case - which is exactly where it's needed.
+        if ($PSScriptRoot -and (Test-Path "$PSScriptRoot\agb-black.rules")) {
+            Warn "  agb-black.rules download failed - falling back to the local copy next to this script"
+            $text = [IO.File]::ReadAllText("$PSScriptRoot\agb-black.rules")
+        } else { return $false }
+    }
     $dropText = [regex]::Replace($text, '(?m)^alert\s', 'drop ')
     [IO.File]::WriteAllText($destPath, $dropText, (New-Object Text.UTF8Encoding($false)))
     return $true
@@ -680,7 +693,13 @@ if (-not $SkipRulesSetup) {
             $passCount = ([regex]::Matches([IO.File]::ReadAllText("$RuleDir\agb-white.rules"), '(?m)^\s*pass\s')).Count
             Log "  wrote $RuleDir\agb-white.rules ($passCount pass signatures)"
         } catch {
-            Warn "  could not download agb-white.rules ($($_.Exception.Message)) - known-good traffic (e.g. *.agb.mywire.org) will alert/log normally instead of being suppressed"
+            # same local-copy fallback as agb-black/agb-heuristics (dodges GitHub 429 on local-file runs)
+            if ($PSScriptRoot -and (Test-Path "$PSScriptRoot\agb-white.rules")) {
+                Copy-Item "$PSScriptRoot\agb-white.rules" "$RuleDir\agb-white.rules" -Force
+                Warn "  agb-white.rules download failed - used the local copy next to this script"
+            } else {
+                Warn "  could not download agb-white.rules ($($_.Exception.Message)) and no local copy next to this script - known-good traffic (e.g. *.agb.mywire.org) will alert/log normally instead of being suppressed"
+            }
         }
 
         Log "  downloading ET Open ruleset (action: alert, unconverted)..."
@@ -776,7 +795,13 @@ if (-not $SkipRulesSetup) {
             Invoke-WebRequest -Uri "$RepoRawBase/agb-heuristics.rules" -OutFile "$RuleDir\agb-heuristics.rules" -UseBasicParsing
             Log "  wrote $RuleDir\agb-heuristics.rules"
         } catch {
-            Warn "  could not download agb-heuristics.rules ($($_.Exception.Message))"
+            # same local-copy fallback as agb-black.rules above (dodges 429 on local-file runs)
+            if ($PSScriptRoot -and (Test-Path "$PSScriptRoot\agb-heuristics.rules")) {
+                Copy-Item "$PSScriptRoot\agb-heuristics.rules" "$RuleDir\agb-heuristics.rules" -Force
+                Warn "  agb-heuristics.rules download failed - used the local copy next to this script"
+            } else {
+                Warn "  could not download agb-heuristics.rules ($($_.Exception.Message)) and no local copy next to this script"
+            }
         }
     }
 } else {
@@ -1112,16 +1137,30 @@ if ($SkipService) {
         # at the next boot. Validate the full config HERE, visibly, and
         # refuse to install the service if it can't load.
         Log "  validating full config with suricata -T before installing the service..."
-        $tExit = 1
+        # GOTCHA FIXED (crashed the whole build on 2026-07-08): suricata -T on
+        # Windows ALWAYS exits non-zero and prints "E: ... unknown rule keyword
+        # 'file.magic'" for ~9 ET Open signatures - the Windows build ships no
+        # libmagic, so those rules are harmlessly SKIPPED at runtime while
+        # everything else loads fine. The original gate had two bugs:
+        #  (a) `& suricata.exe ... 2>&1` let that stderr become a TERMINATING
+        #      error under the script-wide $ErrorActionPreference='Stop',
+        #      aborting the entire build with "UNHANDLED ERROR: ... file.magic"
+        #  (b) it treated ANY non-zero exit as fatal, so it could NEVER pass on
+        #      Windows even without the crash.
+        # Fix: capture output with EAP relaxed, then fail ONLY on errors that
+        # are NOT the known-harmless file.magic ones - exactly the rule
+        # deploy-agb-rules.ps1 already applies.
+        $testOut = $null
         Push-Location $DeployRoot
-        try {
-            & ".\suricata.exe" -c "suricata.yaml" -T 2>&1 | Out-Null
-            $tExit = $LASTEXITCODE
-        } finally { Pop-Location }
-        if ($tExit -ne 0) {
-            Warn "  suricata -T FAILED (exit $tExit) - refusing to install an always-on service on a config that will not load. Debug it: cd '$DeployRoot'; .\suricata.exe -c suricata.yaml -T -v"
+        $savedEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        try { $testOut = & ".\suricata.exe" -c "suricata.yaml" -T 2>&1 } catch { $testOut = "$($_.Exception.Message)" } finally { $ErrorActionPreference = $savedEAP; Pop-Location }
+        $errLines   = @($testOut | Where-Object { "$_" -match '^E:' })
+        $realErrors = @($errLines | Where-Object { "$_" -notmatch "file\.magic" })
+        if ($realErrors.Count -gt 0) {
+            Warn "  suricata -T found REAL errors (not just the harmless file.magic ones) - refusing to install an always-on service on a config that will not load. Debug it: cd '$DeployRoot'; .\suricata.exe -c suricata.yaml -T -v"
+            $realErrors | Select-Object -First 5 | ForEach-Object { Warn "    $_" }
         } else {
-        Log "  config test passed"
+        if ($errLines.Count -gt 0) { Log "  config test passed (ignored $($errLines.Count) expected file.magic errors - those ET rules skip, everything else loads)" } else { Log "  config test passed" }
         $svcName = "SuricataIPS"
         $existingSvc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
         if ($existingSvc) {
