@@ -1,20 +1,11 @@
 # Suricata for Windows — IDS/IPS + Wazuh Integration
-
-# Windows အတွက် Suricata — IDS/IPS + Wazuh ပေါင်းစပ်မှု
-
 ---
 
 Self-contained Suricata deployment for Windows with Wazuh SIEM integration, custom whitelist/blacklist, and auto-kill Active Response.
 
 Windows စက်များတွင် Suricata ကို Wazuh SIEM နှင့် ချိတ်ဆက်ပြီး whitelist/blacklist နှင့် auto-kill Active Response အပါအဝင် အလိုအလျောက် deploy လုပ်ပေးသော script များ ဖြစ်ပါသည်။
 
-```
-traffic → Suricata → eve.json → Wazuh agent → manager → dashboard
-                                                │
-                                    agb-black.rules hit
-                                                ▼
-                              Active Response: kill process + block IP
-```
+![Architecture](architecture.png)
 
 ---
 
