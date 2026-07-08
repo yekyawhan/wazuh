@@ -1,4 +1,4 @@
-# suricata-win
+# suricata-win-ids
 
 Self-contained **Suricata IDS → Wazuh** deployment for Windows. One PowerShell script installs Npcap, Suricata (8.x), the ET Open ruleset, the Windows service, the Wazuh agent binding, and a daily maintenance task — then verifies the whole pipeline.
 
@@ -14,9 +14,9 @@ No external installer dependency. Portable across any user account (machine-wide
 
 | File | What it does |
 | --- | --- |
-| [`suricata-install.ps1`](https://github.com/yekyawhan/wazuh/blob/git-home/suricata-win/suricata-install.ps1) | installer + configurator + verifier |
-| [`Test-SuricataAlerts.ps1`](https://github.com/yekyawhan/wazuh/blob/git-home/suricata-win/Test-SuricataAlerts.ps1) | on-demand alert test (injects WAZUH-TEST rules, fires traffic, confirms) |
-| [`uninstall.ps1`](https://github.com/yekyawhan/wazuh/blob/git-home/suricata-win/uninstall.ps1) | deep clean (service, MSI, configs, rules, eve.json, task, Defender/firewall rules) |
+| [`suricata-install.ps1`](https://github.com/yekyawhan/wazuh/blob/git-home/suricata-win-ids/suricata-install.ps1) | installer + configurator + verifier |
+| [`Test-SuricataAlerts.ps1`](https://github.com/yekyawhan/wazuh/blob/git-home/suricata-win-ids/Test-SuricataAlerts.ps1) | on-demand alert test (injects WAZUH-TEST rules, fires traffic, confirms) |
+| [`uninstall.ps1`](https://github.com/yekyawhan/wazuh/blob/git-home/suricata-win-ids/uninstall.ps1) | deep clean (service, MSI, configs, rules, eve.json, task, Defender/firewall rules) |
 
 > **Run everything from an Administrator PowerShell** (Win+X → *Terminal (Admin)*). All scripts declare `#Requires -RunAsAdministrator`.
 
@@ -26,32 +26,32 @@ No external installer dependency. Portable across any user account (machine-wide
 
 **Install (local IDS; ships to a manager the agent is already enrolled to):**
 ```powershell
-$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win/suricata-install.ps1';$f="$env:TEMP\suricata-install.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f -SelfTest
+$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win-ids/suricata-install.ps1';$f="$env:TEMP\suricata-install.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f -SelfTest
 ```
 
 **Install AND enroll the Wazuh agent to a manager:**
 ```powershell
-$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win/suricata-install.ps1';$f="$env:TEMP\suricata-install.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f -WazuhManager 172.25.33.61 -RegPassword 'YOUR_AUTHD_PASSWORD' -SelfTest
+$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win-ids/suricata-install.ps1';$f="$env:TEMP\suricata-install.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f -WazuhManager 172.25.33.61 -RegPassword 'YOUR_AUTHD_PASSWORD' -SelfTest
 ```
 
 **Install fully unattended (no prompts):**
 ```powershell
-$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win/suricata-install.ps1';$f="$env:TEMP\suricata-install.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f -NoPrompt -CaptureInterfaceName 'Wi-Fi' -HomeNet '[192.168.0.0/16]'
+$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win-ids/suricata-install.ps1';$f="$env:TEMP\suricata-install.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f -NoPrompt -CaptureInterfaceName 'Wi-Fi' -HomeNet '[192.168.0.0/16]'
 ```
 
 **Test alerts on demand:**
 ```powershell
-$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win/Test-SuricataAlerts.ps1';$f="$env:TEMP\Test-SuricataAlerts.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f
+$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win-ids/Test-SuricataAlerts.ps1';$f="$env:TEMP\Test-SuricataAlerts.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f
 ```
 
 **Uninstall (deep clean; keeps Npcap + Wazuh agent):**
 ```powershell
-$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win/uninstall.ps1';$f="$env:TEMP\uninstall.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f
+$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win-ids/uninstall.ps1';$f="$env:TEMP\uninstall.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f
 ```
 
 **Preview an uninstall (changes nothing):**
 ```powershell
-$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win/uninstall.ps1';$f="$env:TEMP\uninstall.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f -WhatIfOnly
+$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win-ids/uninstall.ps1';$f="$env:TEMP\uninstall.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f -WhatIfOnly
 ```
 
 ---
@@ -129,7 +129,7 @@ sudo /var/ossec/bin/agent_control -lc && sudo grep -c "Suricata: Alert" /var/oss
 
 Run it (single line):
 ```powershell
-$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win/Test-SuricataAlerts.ps1';$f="$env:TEMP\Test-SuricataAlerts.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f
+$u='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win-ids/Test-SuricataAlerts.ps1';$f="$env:TEMP\Test-SuricataAlerts.ps1";[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $u -OutFile $f -UseBasicParsing;powershell -ExecutionPolicy Bypass -File $f
 ```
 Confirm on the manager: `sudo grep WAZUH-TEST /var/ossec/logs/alerts/alerts.json`
 
