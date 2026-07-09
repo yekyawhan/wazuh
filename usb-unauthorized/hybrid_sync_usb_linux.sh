@@ -4,9 +4,17 @@
 
 WHITELIST_FILE="/var/ossec/etc/shared/usb_whitelist.txt"
 UDEV_RULE_FILE="/etc/udev/rules.d/99-usb-block.rules"
+LOG_FILE="/var/ossec/logs/active-responses.log"
+
+write_log() {
+    local message="$1"
+    local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+    echo "$timestamp - hybrid_sync_usb_linux - $message" >> "$LOG_FILE"
+    echo "$message"
+}
 
 if [ ! -f "$WHITELIST_FILE" ]; then
-    echo "Whitelist file not found in Wazuh shared folder ($WHITELIST_FILE). Exiting."
+    write_log "Error: Whitelist file not found in Wazuh shared folder ($WHITELIST_FILE)."
     exit 1
 fi
 
@@ -15,6 +23,8 @@ echo "# Block all USB storage by default" >> "$UDEV_RULE_FILE"
 echo 'ACTION=="add", SUBSYSTEMS=="usb", ATTR{authorized}="0"' >> "$UDEV_RULE_FILE"
 echo "" >> "$UDEV_RULE_FILE"
 echo "# Allowed USB Devices" >> "$UDEV_RULE_FILE"
+
+PROCESSED_IDS=""
 
 # Parse the whitelist (Format expected: 0951:1666 or USB\VID_0951&PID_1666)
 while IFS= read -r line; do
@@ -37,10 +47,10 @@ while IFS= read -r line; do
     pid=$(echo "$pid" | tr '[:upper:]' '[:lower:]')
 
     echo "ACTION==\"add\", SUBSYSTEMS==\"usb\", ATTR{idVendor}==\"$vid\", ATTR{idProduct}==\"$pid\", ATTR{authorized}=\"1\"" >> "$UDEV_RULE_FILE"
+    PROCESSED_IDS="$PROCESSED_IDS $vid:$pid"
 done < "$WHITELIST_FILE"
 
-echo "Reloading udev rules..."
 udevadm control --reload-rules
 udevadm trigger
 
-echo "Linux USB udev rules updated successfully from Wazuh Centralized Config."
+write_log "Success: Linux USB udev rules updated from Wazuh Centralized Config. Authorized IDs:${PROCESSED_IDS}"

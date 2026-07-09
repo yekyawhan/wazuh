@@ -2,8 +2,17 @@
 # Reads usb_whitelist.txt from Wazuh shared folder and applies to Windows GPO
 
 $whitelistFile = "C:\Program Files (x86)\ossec-agent\shared\usb_whitelist.txt"
+$logFile = "C:\Program Files (x86)\ossec-agent\active-response\active-responses.log"
+
+function Write-Log($message) {
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "$timestamp - hybrid_sync_usb - $message"
+    Write-Host $logMessage
+    Add-Content -Path $logFile -Value $logMessage
+}
+
 if (-not (Test-Path $whitelistFile)) {
-    Write-Host "Whitelist file not found in Wazuh shared folder. Exiting."
+    Write-Log "Error: Whitelist file not found in Wazuh shared folder."
     exit
 }
 
@@ -28,6 +37,7 @@ Get-Item -Path $allowPath | Select-Object -ExpandProperty Property | ForEach-Obj
 
 # Add new whitelist IDs from Centralized file
 $i = 1
+$processedIds = @()
 foreach ($id in $allowedIds) {
     $cleanId = $id.Trim()
     
@@ -37,8 +47,9 @@ foreach ($id in $allowedIds) {
     }
     
     Set-ItemProperty -Path $allowPath -Name $i.ToString() -Value $cleanId -Type String
+    $processedIds += $cleanId
     $i++
 }
 
-Write-Host "USB GPO updated successfully from Wazuh Centralized Config."
-gpupdate /force
+gpupdate /force | Out-Null
+Write-Log "Success: USB GPO updated from Wazuh Centralized Config. Authorized IDs: $($processedIds -join ', ')"
