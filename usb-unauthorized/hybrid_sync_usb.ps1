@@ -8,7 +8,19 @@ function Write-Log($message) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $logMessage = "$timestamp - hybrid_sync_usb - $message"
     Write-Host $logMessage
-    Add-Content -Path $logFile -Value $logMessage
+    
+    # Retry mechanism for file locking (Wazuh agent might be reading the log)
+    $retryCount = 0
+    $maxRetries = 3
+    while ($retryCount -lt $maxRetries) {
+        try {
+            Add-Content -Path $logFile -Value $logMessage -ErrorAction Stop
+            break
+        } catch {
+            $retryCount++
+            Start-Sleep -Seconds 1
+        }
+    }
 }
 
 if (-not (Test-Path $whitelistFile)) {
