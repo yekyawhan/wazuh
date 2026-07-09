@@ -2,20 +2,6 @@
 
 A modular **Wazuh / SIEM / EDR / SOAR lab repository** for deploying and testing security monitoring components across **Windows** and **Linux** environments.
 
-## Quick Install (One-liners)
-
-**Suricata IDS for Windows (Install Everything):**
-```powershell
-[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win/agb-full-setup.ps1 -UseBasicParsing | iex
-```
-
-**Suricata IPS for Windows (WinDivert - Experimental Blocking):**
-```powershell
-[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win/build-suricata-ips.ps1 -UseBasicParsing | iex
-```
-
----
-
 This repository contains scripts, automation, and lab resources for:
 
 * **Wazuh agent deployment**
