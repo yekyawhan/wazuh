@@ -1,0 +1,32 @@
+<!--
+  USB blocking - Wazuh detection rules (alerting only, no Active Response).
+  Drop into /var/ossec/etc/rules/ on the Wazuh Manager and restart:
+    systemctl restart wazuh-manager
+-->
+
+<group name="usb,device-control,">
+
+  <!-- ============================================================ -->
+  <!-- Windows: Kernel-PnP device installation blocked by GPO.       -->
+  <!-- Event ID 219 logged when driver install is denied.           -->
+  <!-- ============================================================ -->
+  <rule id="100200" level="10">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">219</field>
+    <description>Windows blocked USB device installation (GPO Device Installation Restriction).</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <!-- ============================================================ -->
+  <!-- Linux: udev denied authorization for a USB device.           -->
+  <!-- Visible in /var/log/syslog or dmesg.                         -->
+  <!-- ============================================================ -->
+  <rule id="100210" level="10">
+    <if_group>syslog</if_group>
+    <match>udev</match>
+    <regex>usb \d+-\d+: (authorized|unauthorized)|usb \d+-\d+: USB device \d+ is not authorized</regex>
+    <description>Linux udev denied USB device (default-deny policy).</description>
+    <options>no_full_log</options>
+  </rule>
+
+</group>
