@@ -80,3 +80,26 @@ To authorize a new USB device, you need its Hardware ID (VID/PID). Run these com
 ```bash
 curl -sL https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/get_usb_info.sh | bash
 ```
+
+## 3. Advanced Monitoring & Audit Loop
+USB စနစ်ကို Block လုပ်ထားရုံနဲ့ မပြီးပါဘူး။ "ဘယ်သူက ဘယ် USB ကို ခိုးထိုးဖို့ ကြိုးစားခဲ့လဲ" ဆိုတာကို စောင့်ကြည့်ဖို့ Audit Loop ဆောက်ထားသင့်ပါတယ်။
+
+### 3.1. Wazuh Manager Dashboard Visualizer
+USB Blocking Alert (Rule 100031) ကို Dashboard မှာ ကြည့်ရန်:
+1. **Visualize** > **Create Visualization** > **Data Table** ကို ရွေးပါ။
+2. **Buckets** > **Split rows** > `data.agent.name` (သို့) `data.agent.id` ကို ရွေးပါ။
+3. Filter တွင် `rule.id: 100031` ကို ထည့်ပါ။
+*ရလဒ်အနေဖြင့် ဘယ်စက်က USB ခိုးထိုးမှု အများဆုံးလဲဆိုတာကို Table ပုံစံဖြင့် မြင်တွေ့ရပါမည်။*
+
+### 3.2. High-Risk Correlation Rule
+တစ်မိနစ်အတွင်း ၅ ကြိမ်ထက်ပို၍ ခိုးထိုးပါက Level 12 အဆင့် Alert တက်စေရန် `/var/ossec/etc/rules/local_rules.xml` တွင် ထည့်ပါ။
+```xml
+<rule id="100035" level="12" frequency="5" timeframe="60">
+  <if_matched_sid>100031</if_matched_sid>
+  <description>User is attempting to plug unauthorized USB multiple times (High Risk).</description>
+  <group>usb_blocked,pci_dss_10.2.4,</group>
+</rule>
+```
+
+### 3.3. Automated Reporting
+- **Reporting** feature ကို အသုံးပြု၍ အထက်ပါ Visualization ကိုနေ့စဉ်/အပတ်စဉ် Report ထုတ်စေပြီး ကိုရဲ၏ အီးမေးလ်ဆီ Auto ပို့ခိုင်းပါ။
