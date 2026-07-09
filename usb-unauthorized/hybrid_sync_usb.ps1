@@ -7,7 +7,8 @@ if (-not (Test-Path $whitelistFile)) {
     exit
 }
 
-$allowedIds = Get-Content $whitelistFile | Where-Object { $_ -match "\S" }
+# Read lines, ignore empty lines and comments (lines starting with #)
+$allowedIds = Get-Content $whitelistFile | Where-Object { $_ -match "\S" -and $_ -notmatch "^#" }
 
 $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
 $allowPath = "$regPath\AllowInstallationOfMatchingDeviceIDs"
@@ -29,6 +30,12 @@ Get-Item -Path $allowPath | Select-Object -ExpandProperty Property | ForEach-Obj
 $i = 1
 foreach ($id in $allowedIds) {
     $cleanId = $id.Trim()
+    
+    # Handle Linux format (0951:1666) -> Windows format (USB\VID_0951&PID_1666)
+    if ($cleanId -match "^([0-9a-fA-F]{4}):([0-9a-fA-F]{4})$") {
+        $cleanId = "USB\VID_$($matches[1])&PID_$($matches[2])"
+    }
+    
     Set-ItemProperty -Path $allowPath -Name $i.ToString() -Value $cleanId -Type String
     $i++
 }
