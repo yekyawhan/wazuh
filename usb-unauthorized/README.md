@@ -1,8 +1,8 @@
-# USB Unauthorized Device Monitoring and Blocking (OS-Native + Wazuh)
+# USB Unauthorized Device Monitoring and Blocking (Hybrid Approach: Wazuh Centralized + OS-Native)
 
-This project provides an offline-capable USB blocking solution using native OS policies (GPO for Windows, `udev` for Linux) while utilizing Wazuh strictly for alerting and auditing.
+This project provides an enterprise-grade USB blocking solution. It uses **Wazuh Centralized Configuration** to distribute a whitelist of allowed USBs, and **OS-Native Policies (Windows GPO / Linux udev)** to enforce the block even when endpoints are offline. Wazuh is used for configuration sync and alerting.
 
-Windows နှင့် Linux စက်များတွင် ခွင့်ပြုချက်မရှိသော USB များကို Native OS Policy (GPO / udev) များဖြင့် ပိတ်ပင်ပြီး Wazuh ကို Alert/Audit အတွက်သာ အသုံးပြုမည့် စနစ်ဖြစ်ပါသည်။
+Windows နှင့် Linux စက်များတွင် ခွင့်ပြုချက်မရှိသော USB များကို Native OS Policy (GPO / udev) များဖြင့် ပိတ်ပင်ပြီး (Offline အလုပ်လုပ်ရန်)၊ Manager ဘက်မှနေ၍ USB Whitelist ဖိုင်ကို တစ်နေရာတည်းမှ ထိန်းချုပ်ဖြန့်ဝေနိုင်သော (Centralized) စနစ်ဖြစ်ပါသည်။ 
 
 ![Architecture Flow](assets/flow.svg)
 
@@ -10,44 +10,66 @@ Windows နှင့် Linux စက်များတွင် ခွင့်�
 
 ## 📦 Architecture
 
-This approach shifts the blocking mechanism from Wazuh Active Response (which fails if the agent is offline) to OS-level enforcement.
-
--   **Blocking Layer:** Handled entirely by the Operating System (Registry/GPO on Windows, `udev` on Linux). Works 100% offline.
--   **Alerting Layer:** Wazuh Agent monitors OS event logs. If offline, it queues the logs and sends alerts to the Manager once online.
+-   **Centralized Control (Manager):** Maintain one `usb_whitelist.txt` file on the Wazuh Manager.
+-   **Distribution (Wazuh Sync):** Wazuh automatically pushes this file to all agents.
+-   **Enforcement Layer (OS):** Agent-side script periodically reads the synced file and applies it to Local GPO (Windows) or `udev` (Linux). USBs are blocked at the OS level (100% Offline Capable).
+-   **Alerting Layer:** Wazuh Agent monitors OS event logs and alerts the Manager when a block occurs.
 
 ---
 
-## 🚀 Quick Start / အမြန်စတင်ရန်
+## 🚀 Setup Guide / တပ်ဆင်ရန် လမ်းညွှန်
 
-> **⚠️ Administrator (Windows) သို့မဟုတ် Root (Linux) လိုအပ်ပါသည်**
+### 1. Wazuh Manager Setup (Central Control)
+Run these on your Wazuh Manager:
 
-### 🪟 Windows (GPO Setup)
+1. Create the whitelist file:
+   ```bash
+   nano /var/ossec/etc/shared/default/usb_whitelist.txt
+   ```
+   *Add your allowed USB IDs (one per line, e.g., `USB\VID_0951&PID_1666`).*
 
-**CDN version (recommended / အကြံပြု):**
+2. Configure Agents to sync it via `agent.conf`:
+   ```bash
+   nano /var/ossec/etc/shared/default/agent.conf
+   ```
+   *Add the following block:*
+   ```xml
+   <agent_config os="Windows">
+     <localfile>
+       <log_format>command</log_format>
+       <command>powershell -ExecutionPolicy Bypass -File "C:\Program Files (x86)\ossec-agent\active-response\bin\hybrid_sync_usb.ps1"</command>
+       <frequency>3600</frequency>
+     </localfile>
+   </agent_config>
+   ```
+
+3. Configure Alerting Rules:
+   Copy `wazuh_rules.xml` content into your `/var/ossec/etc/rules/local_rules.xml`.
+
+4. Fix permissions and restart:
+   ```bash
+   chown ossec:ossec /var/ossec/etc/shared/default/usb_whitelist.txt
+   systemctl restart wazuh-manager
+   ```
+
+### 2. Windows Endpoint Setup
+Run this **ONCE** on the Windows endpoint to place the sync script.
+
+**CDN version (recommended):**
 ```powershell
-[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@master/usb-unauthorized/windows_gpo_setup.ps1 -UseBasicParsing | iex
+[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@master/usb-unauthorized/hybrid_sync_usb.ps1 -UseBasicParsing -OutFile "C:\Program Files (x86)\ossec-agent\active-response\bin\hybrid_sync_usb.ps1"
 ```
 
 **GitHub raw version:**
 ```powershell
-[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr https://raw.githubusercontent.com/yekyawhan/wazuh/master/usb-unauthorized/windows_gpo_setup.ps1 -UseBasicParsing | iex
+[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr https://raw.githubusercontent.com/yekyawhan/wazuh/master/usb-unauthorized/hybrid_sync_usb.ps1 -UseBasicParsing -OutFile "C:\Program Files (x86)\ossec-agent\active-response\bin\hybrid_sync_usb.ps1"
 ```
 
-*Note: Default whitelist တွင် `USB\VID_0951&PID_1666` ကို ထည့်သွင်းပေးထားပါသည်။ Script ကို ဒေါင်းလုဒ်ဆွဲပြီး `-Whitelist` parameter ဖြင့် မိမိစိတ်ကြိုက် ပြောင်းလဲအသုံးပြုနိုင်ပါသည်။*
-
-### 🐧 Linux (udev Setup)
-
-**CDN version (recommended / အကြံပြု):**
+### 3. Linux Endpoint Setup (Offline `udev` mode)
+Run the Bash script as root:
 ```bash
-curl -sL https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@master/usb-unauthorized/linux_udev_setup.sh | sudo bash
+curl -sL https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@master/usb-unauthorized/linux_udev_setup.sh | sudo bash -s -- -w "0951:1666 0781:5591"
 ```
-
-**GitHub raw version:**
-```bash
-curl -sL https://raw.githubusercontent.com/yekyawhan/wazuh/master/usb-unauthorized/linux_udev_setup.sh | sudo bash
-```
-
-*Note: Default whitelist တွင် `0951:1666` ကို ထည့်သွင်းပေးထားပါသည်။ Script ကို ဒေါင်းလုဒ်ဆွဲပြီး `-w` parameter ဖြင့် မိမိစိတ်ကြိုက် ပြောင်းလဲအသုံးပြုနိုင်ပါသည်။*
 
 ---
 
@@ -55,27 +77,9 @@ curl -sL https://raw.githubusercontent.com/yekyawhan/wazuh/master/usb-unauthoriz
 
 | File | Description / ရှင်းလင်းချက် |
 | --- | --- |
-| `windows_gpo_setup.ps1` | **Windows Script** — Local GPO registry keys များကို ပြင်ဆင်ပြီး USB အားလုံးကို ပိတ်ကာ Whitelist ID များကိုသာ ခွင့်ပြုပေးပါသည်။ |
-| `linux_udev_setup.sh` | **Linux Script** — `udev` rules များကို ဖန်တီး၍ USB များကို block လုပ်ပြီး Whitelist ID များကိုသာ ခွင့်ပြုပေးပါသည်။ |
-| `wazuh_rules.xml` | **Wazuh Rules** — OS မှ USB ကို ပိတ်လိုက်သောအခါ (Windows Event 219, Linux syslog) Wazuh Manager မှ Alert ထုတ်ပေးမည့် rules ဖြစ်ပါသည်။ |
-| `assets/flow.excalidraw` | Architecture diagram file (Excalidraw). |
-
----
-
-## ⚙️ Wazuh Manager Configuration
-
-1. `wazuh_rules.xml` ဖိုင်ထဲမှ contents များကို Wazuh Manager ၏ `/var/ossec/etc/rules/local_rules.xml` တွင် ကူးထည့်ပါ။
-2. Manager ကို Restart ချပါ:
-   ```bash
-   sudo systemctl restart wazuh-manager
-   ```
-
----
-
-## ✅ Verify / စစ်ဆေးရန်
-
-**Windows တွင် စစ်ဆေးရန်:**
-- Event Viewer ကိုဖွင့်ပါ။ `Applications and Services Logs` -> `Microsoft` -> `Windows` -> `Kernel-PnP` -> `Configuration` တွင် စစ်ဆေးပါ။ ခွင့်မပြုထားသော USB ထိုးလျှင် **Event ID 219** တက်ရပါမည်။
-
-**Linux တွင် စစ်ဆေးရန်:**
-- Terminal တွင် `dmesg | tail` သို့မဟုတ် `cat /var/log/syslog | grep usb` ရိုက်၍ စစ်ဆေးပါ။ ခွင့်မပြုထားသော USB ထိုးလျှင် `not authorized` ဟု ပေါ်ရပါမည်။
+| `usb_whitelist.txt` | Manager ဘက်တွင် ထားရမည့် ခွင့်ပြုထားသော USB ID စာရင်း (Centralized Control) |
+| `agent.conf.snippet` | Manager မှ Agent များဆီ sync လုပ်ခိုင်းမည့် Configuration |
+| `hybrid_sync_usb.ps1` | Windows Agent မှ Manager ပို့ပေးသော whitelist ကို ဖတ်၍ GPO ကို Auto Update လုပ်ပေးမည့် Script |
+| `linux_udev_setup.sh` | Linux Agent အတွက် `udev` rules ဖန်တီးပေးသော Script |
+| `wazuh_rules.xml` | OS မှ USB ပိတ်လိုက်သောအခါ Wazuh Manager မှ Alert ထုတ်ပေးမည့် rules |
+| `assets/flow.svg` | Architecture diagram |
