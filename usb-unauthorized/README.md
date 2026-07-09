@@ -4,7 +4,7 @@ This project provides an offline-capable USB blocking solution using native OS p
 
 Windows နှင့် Linux စက်များတွင် ခွင့်ပြုချက်မရှိသော USB များကို Native OS Policy (GPO / udev) များဖြင့် ပိတ်ပင်ပြီး Wazuh ကို Alert/Audit အတွက်သာ အသုံးပြုမည့် စနစ်ဖြစ်ပါသည်။
 
-![Architecture Flow](assets/flow.png)
+![Architecture Flow](assets/flow.svg)
 
 ---
 
