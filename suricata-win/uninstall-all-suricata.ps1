@@ -127,9 +127,9 @@ if ($AlsoRemoveNpcap) { $idsArgs += "-AlsoRemoveNpcap" }
 if ($RemoveWazuhAgent) { $idsArgs += "-RemoveWazuhAgent" }
 if ($WhatIfOnly) { $idsArgs += "-WhatIfOnly" }
 
-$localCopy = Join-Path $PSScriptRoot 'agb-full-uninstall.ps1'
+$localCopy = if ($PSScriptRoot) { Join-Path $PSScriptRoot 'agb-full-uninstall.ps1' } else { $null }
 $ran = $false
-if (Test-Path $localCopy) {
+if ($localCopy -and (Test-Path $localCopy)) {
     Log "using local agb-full-uninstall.ps1 next to this script (no download needed)"
     & powershell.exe -ExecutionPolicy Bypass -File $localCopy @idsArgs
     $ran = $true
@@ -142,7 +142,7 @@ if (Test-Path $localCopy) {
             & powershell.exe -ExecutionPolicy Bypass -File $idsUninstaller @idsArgs
             $ran = $true
         } catch {
-            Warn "download of agb-full-uninstall.ps1 failed (attempt $try/3): $($_.Exception.Message)"
+            if ($try -eq 1) { Warn "agb-full-uninstall.ps1 download failed: $($_.Exception.Message) - retrying (GitHub 60/hr limit, clears in minutes)" }
             if ($try -lt 3) { Start-Sleep -Seconds 5 }
         }
     }
