@@ -1,35 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
-  <!-- Background -->
-  <rect width="800" height="400" fill="#ffffff" rx="10"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
+  <rect width="800" height="450" fill="#ffffff"/>
+  
+  <!-- Manager Zone -->
+  <rect x="50" y="50" width="700" height="120" fill="#f8f9fa" stroke="#adb5bd" stroke-width="2" rx="10" stroke-dasharray="5,5"/>
+  <text x="400" y="80" font-family="Arial" font-size="16" font-weight="bold" text-anchor="middle">Wazuh Manager (Central Control)</text>
+  <rect x="300" y="100" width="200" height="50" fill="#fff3bf" stroke="#f59f00" stroke-width="2" rx="5"/>
+  <text x="400" y="130" font-family="Arial" font-size="14" text-anchor="middle">usb_whitelist.txt</text>
 
-  <!-- Title -->
-  <text x="400" y="40" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#333">USB Blocking Architecture</text>
+  <!-- Sync Arrow -->
+  <path d="M 400 150 L 400 220" stroke="#495057" stroke-width="2" marker-end="url(#arrow)"/>
 
-  <!-- OS Layer -->
-  <rect x="50" y="100" width="300" height="150" fill="#e3f2fd" stroke="#1565c0" stroke-width="2" rx="8"/>
-  <text x="200" y="140" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="#0d47a1">OS Layer</text>
-  <text x="200" y="170" font-family="Arial, sans-serif" font-size="16" text-anchor="middle" fill="#333">Windows GPO / Linux udev</text>
-  <rect x="100" y="190" width="200" height="40" fill="#c62828" stroke="#b71c1c" stroke-width="1" rx="4"/>
-  <text x="200" y="215" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#fff">Blocks Unauthorized USB</text>
-  <text x="200" y="240" font-family="Arial, sans-serif" font-size="12" font-style="italic" text-anchor="middle" fill="#d32f2f">100% Offline Capable</text>
+  <!-- Endpoint Zone -->
+  <rect x="50" y="250" width="700" height="150" fill="#f1f3f5" stroke="#adb5bd" stroke-width="2" rx="10"/>
+  <text x="400" y="280" font-family="Arial" font-size="16" font-weight="bold" text-anchor="middle">Endpoint (Windows/Linux)</text>
+  
+  <rect x="100" y="310" width="250" height="60" fill="#a5d8ff" stroke="#339af0" stroke-width="2" rx="5"/>
+  <text x="225" y="345" font-family="Arial" font-size="14" text-anchor="middle">OS Blocking (GPO / udev)</text>
+  
+  <rect x="450" y="310" width="250" height="60" fill="#b2f2bb" stroke="#51cf66" stroke-width="2" rx="5"/>
+  <text x="575" y="345" font-family="Arial" font-size="14" text-anchor="middle">Wazuh Agent (Sync & Alert)</text>
 
-  <!-- Wazuh Agent -->
-  <rect x="450" y="100" width="300" height="80" fill="#fff3e0" stroke="#ef6c00" stroke-width="2" rx="8"/>
-  <text x="600" y="135" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="#e65100">Wazuh Agent</text>
-  <text x="600" y="160" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#333">Reads OS Event Logs / syslog</text>
-
-  <!-- Wazuh Manager -->
-  <rect x="450" y="250" width="300" height="80" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2" rx="8"/>
-  <text x="600" y="285" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="#1b5e20">Wazuh Manager</text>
-  <text x="600" y="310" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#333">Generates Alerts</text>
-
-  <!-- Arrows -->
-  <g stroke="#666" stroke-width="3" fill="none">
-    <path d="M 350 140 L 440 140"/>
-    <path d="M 600 180 L 600 240"/>
-  </g>
-  <g fill="#666">
-    <polygon points="440,135 450,140 440,145"/>
-    <polygon points="595,240 600,250 605,240"/>
-  </g>
+  <!-- Definitions -->
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#495057" />
+    </marker>
+  </defs>
 </svg>
