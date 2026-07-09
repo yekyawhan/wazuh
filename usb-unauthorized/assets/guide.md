@@ -67,3 +67,16 @@
 ```bash
 curl -sL https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/hybrid_sync_usb_linux.sh -o /var/ossec/active-response/bin/hybrid_sync_usb_linux.sh && chmod +x /var/ossec/active-response/bin/hybrid_sync_usb_linux.sh
 ```
+
+## 2. Utility: How to get USB Hardware ID
+To authorize a new USB device, you need its Hardware ID (VID/PID). Run these commands on the target endpoint and add the result to your `usb_whitelist.txt`.
+
+**Windows (PowerShell):**
+```powershell
+[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/get_usb_info.ps1 -UseBasicParsing | iex
+```
+
+**Linux (Bash):**
+```bash
+curl -sL https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/get_usb_info.sh | bash
+```
