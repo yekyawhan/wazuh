@@ -62,6 +62,10 @@ IDS ပေါ်မှာ ထပ်ထည့်ရတယ်။ Suricata ကိ�
 ```powershell
 [Net.ServicePointManager]::SecurityProtocol='Tls12';iwr https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win/build-suricata-ips.ps1 -UseBasicParsing | iex
 ```
+### Step 3:Manual To Auto Mode 
+```
+[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/suricata-win/install-suricata-ips-service.ps1 -UseBasicParsing | iex
+```
 
 ---
 

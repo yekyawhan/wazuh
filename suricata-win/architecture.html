@@ -1,0 +1,178 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Suricata IDS/IPS + Wazuh Architecture</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0f172a;
+    --fg: #e5e7eb;
+    --muted: #a3adbd;
+    --line: #94a3b8;
+    --neutral: #334155;
+    --input: #1d4ed8;
+    --process: #4338ca;
+    --storage: #0f766e;
+    --external: #92400e;
+    --risk: #991b1b;
+    --success: #166534;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.4 ui-sans-serif, system-ui, sans-serif;
+  }
+  main {
+    max-width: 980px;
+    margin: 32px auto;
+    padding: 0 20px;
+  }
+  svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .title { font-size: 18px; font-weight: 700; fill: var(--fg); }
+  .label { font-size: 13px; font-weight: 600; fill: var(--fg); }
+  .small { font-size: 11px; fill: var(--muted); }
+  .node { stroke: var(--line); stroke-width: 1.2; }
+  .edge { stroke: var(--line); stroke-width: 1.5; fill: none; }
+  .edge-red { stroke: #ef4444; stroke-width: 2; fill: none; }
+  .edge-green { stroke: #22c55e; stroke-width: 1.5; fill: none; }
+  .zone { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 6 5; opacity: 0.6; }
+</style>
+<main>
+<svg viewBox="0 0 920 520" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="var(--line)" />
+    </marker>
+    <marker id="ah-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#ef4444" />
+    </marker>
+    <marker id="ah-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#22c55e" />
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="460" y="30" text-anchor="middle" class="title">Suricata IDS/IPS + Wazuh — Architecture Flow</text>
+
+  <!-- Zone: Windows Agent -->
+  <rect x="20" y="50" width="580" height="200" rx="8" class="zone" />
+  <text x="35" y="72" class="small">🖥️ Windows Agent</text>
+
+  <!-- Traffic -->
+  <rect x="40" y="100" width="110" height="50" rx="6" class="node" fill="var(--input)" />
+  <text x="95" y="122" text-anchor="middle" class="label">Network</text>
+  <text x="95" y="136" text-anchor="middle" class="small">Traffic</text>
+
+  <!-- Suricata -->
+  <rect x="200" y="85" width="140" height="80" rx="6" class="node" fill="var(--process)" />
+  <text x="270" y="112" text-anchor="middle" class="label">Suricata</text>
+  <text x="270" y="128" text-anchor="middle" class="small">IDS (alert)</text>
+  <text x="270" y="142" text-anchor="middle" class="small">IPS (drop) ⚡</text>
+
+  <!-- eve.json -->
+  <rect x="390" y="100" width="100" height="50" rx="6" class="node" fill="var(--storage)" />
+  <text x="440" y="122" text-anchor="middle" class="label">eve.json</text>
+  <text x="440" y="136" text-anchor="middle" class="small">alerts log</text>
+
+  <!-- Wazuh Agent -->
+  <rect x="530" y="100" width="110" height="50" rx="20" class="node" fill="var(--neutral)" />
+  <text x="585" y="130" text-anchor="middle" class="label">Wazuh Agent</text>
+
+  <!-- Arrows: top flow -->
+  <line x1="150" y1="125" x2="195" y2="125" class="edge" marker-end="url(#ah)" />
+  <line x1="340" y1="125" x2="385" y2="125" class="edge" marker-end="url(#ah)" />
+  <line x1="490" y1="125" x2="525" y2="125" class="edge" marker-end="url(#ah)" />
+
+  <!-- Rules box -->
+  <rect x="200" y="185" width="140" height="55" rx="6" class="node" fill="var(--neutral)" />
+  <text x="270" y="205" text-anchor="middle" class="small">📋 Rules</text>
+  <text x="270" y="219" text-anchor="middle" class="small">agb-white (pass)</text>
+  <text x="270" y="232" text-anchor="middle" class="small">agb-black (drop/alert)</text>
+
+  <!-- Arrow: rules to suricata -->
+  <line x1="270" y1="185" x2="270" y2="170" class="edge-green" marker-end="url(#ah-green)" />
+
+  <!-- Zone: Wazuh Manager -->
+  <rect x="620" y="50" width="280" height="200" rx="8" class="zone" />
+  <text x="635" y="72" class="small">🏢 Wazuh Manager (Linux)</text>
+
+  <!-- Manager -->
+  <rect x="650" y="95" width="120" height="60" rx="6" class="node" fill="var(--process)" />
+  <text x="710" y="118" text-anchor="middle" class="label">Manager</text>
+  <text x="710" y="134" text-anchor="middle" class="small">rule 86601</text>
+
+  <!-- Dashboard -->
+  <rect x="800" y="95" width="85" height="60" rx="6" class="node" fill="var(--storage)" />
+  <text x="842" y="122" text-anchor="middle" class="label">📊</text>
+  <text x="842" y="138" text-anchor="middle" class="small">Dashboard</text>
+
+  <!-- Arrow: agent to manager -->
+  <line x1="640" y1="125" x2="645" y2="125" class="edge" marker-end="url(#ah)" />
+  <!-- Arrow: manager to dashboard -->
+  <line x1="770" y1="125" x2="795" y2="125" class="edge" marker-end="url(#ah)" />
+
+  <!-- C2 match detection zone -->
+  <rect x="620" y="180" width="145" height="50" rx="6" class="node" fill="var(--risk)" />
+  <text x="692" y="202" text-anchor="middle" class="label">⚠️ C2 Match</text>
+  <text x="692" y="216" text-anchor="middle" class="small">agb-black hit</text>
+
+  <!-- Arrow: manager to C2 -->
+  <line x1="710" y1="155" x2="700" y2="175" class="edge-red" marker-end="url(#ah-red)" />
+
+  <!-- Active Response zone -->
+  <rect x="20" y="300" width="880" height="190" rx="8" class="zone" />
+  <text x="35" y="322" class="small">🔴 Active Response (auto-kill pipeline)</text>
+
+  <!-- IPS instant drop -->
+  <rect x="50" y="345" width="170" height="60" rx="6" class="node" fill="var(--risk)" />
+  <text x="135" y="368" text-anchor="middle" class="label">⚡ IPS Instant Drop</text>
+  <text x="135" y="384" text-anchor="middle" class="small">WinDivert blocks packet</text>
+  <text x="135" y="397" text-anchor="middle" class="small">~0ms (inline)</text>
+
+  <!-- Wazuh AR -->
+  <rect x="280" y="345" width="170" height="60" rx="6" class="node" fill="var(--external)" />
+  <text x="365" y="368" text-anchor="middle" class="label">🛡️ Wazuh AR</text>
+  <text x="365" y="384" text-anchor="middle" class="small">agb-kill-block.ps1</text>
+  <text x="365" y="397" text-anchor="middle" class="small">~2-5s (reactive)</text>
+
+  <!-- Kill process -->
+  <rect x="510" y="345" width="140" height="60" rx="6" class="node" fill="var(--risk)" />
+  <text x="580" y="368" text-anchor="middle" class="label">💀 Kill Process</text>
+  <text x="580" y="384" text-anchor="middle" class="small">taskkill /PID</text>
+
+  <!-- Block IP -->
+  <rect x="710" y="345" width="140" height="60" rx="6" class="node" fill="var(--risk)" />
+  <text x="780" y="368" text-anchor="middle" class="label">🚫 Block IP</text>
+  <text x="780" y="384" text-anchor="middle" class="small">netsh firewall rule</text>
+
+  <!-- Arrows: AR flow -->
+  <path d="M692,230 L692,260 Q692,280 672,280 L365,280 L365,340" class="edge-red" marker-end="url(#ah-red)" />
+  <line x1="450" y1="375" x2="505" y2="375" class="edge-red" marker-end="url(#ah-red)" />
+  <line x1="650" y1="375" x2="705" y2="375" class="edge-red" marker-end="url(#ah-red)" />
+
+  <!-- Arrow: Suricata IPS direct drop -->
+  <path d="M240,165 L240,280 Q240,300 200,300 L135,300 L135,340" class="edge-red" marker-end="url(#ah-red)" />
+  <text x="175" y="295" class="small" fill="#ef4444">IPS only</text>
+
+  <!-- Legend -->
+  <rect x="50" y="440" width="12" height="12" rx="2" fill="var(--input)" />
+  <text x="68" y="451" class="small">Input</text>
+  <rect x="130" y="440" width="12" height="12" rx="2" fill="var(--process)" />
+  <text x="148" y="451" class="small">Processing</text>
+  <rect x="240" y="440" width="12" height="12" rx="2" fill="var(--storage)" />
+  <text x="258" y="451" class="small">Storage/Output</text>
+  <rect x="380" y="440" width="12" height="12" rx="2" fill="var(--risk)" />
+  <text x="398" y="451" class="small">Blocking/Kill</text>
+  <rect x="510" y="440" width="12" height="12" rx="2" fill="var(--external)" />
+  <text x="528" y="451" class="small">Active Response</text>
+
+  <text x="50" y="475" class="small">⚡ = IPS inline (instant, WinDivert)</text>
+  <text x="50" y="490" class="small">🛡️ = IDS reactive (Wazuh AR, ~2-5s delay)</text>
+  <text x="50" y="505" class="small">Both layers work together — IPS blocks first packet, AR adds firewall rule + kills process</text>
+</svg>
+</main>
