@@ -1,10 +1,18 @@
 <!-- Manager Side: Add this to /var/ossec/etc/shared/default/agent.conf -->
-<!-- This configures the Windows agent to run the sync script periodically -->
+<!-- This configures agents to run the sync script periodically -->
 
 <agent_config os="Windows">
   <localfile>
     <log_format>command</log_format>
     <command>powershell -ExecutionPolicy Bypass -File "C:\Program Files (x86)\ossec-agent\active-response\bin\hybrid_sync_usb.ps1"</command>
+    <frequency>3600</frequency>
+  </localfile>
+</agent_config>
+
+<agent_config os="Linux">
+  <localfile>
+    <log_format>command</log_format>
+    <command>/var/ossec/active-response/bin/hybrid_sync_usb_linux.sh</command>
     <frequency>3600</frequency>
   </localfile>
 </agent_config>
