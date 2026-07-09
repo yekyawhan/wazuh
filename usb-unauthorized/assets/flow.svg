@@ -1,29 +1,39 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
-  <rect width="800" height="450" fill="#ffffff"/>
-  
-  <!-- Manager Zone -->
-  <rect x="50" y="50" width="700" height="120" fill="#f8f9fa" stroke="#adb5bd" stroke-width="2" rx="10" stroke-dasharray="5,5"/>
-  <text x="400" y="80" font-family="Arial" font-size="16" font-weight="bold" text-anchor="middle">Wazuh Manager (Central Control)</text>
-  <rect x="300" y="100" width="200" height="50" fill="#fff3bf" stroke="#f59f00" stroke-width="2" rx="5"/>
-  <text x="400" y="130" font-family="Arial" font-size="14" text-anchor="middle">usb_whitelist.txt</text>
-
-  <!-- Sync Arrow -->
-  <path d="M 400 150 L 400 220" stroke="#495057" stroke-width="2" marker-end="url(#arrow)"/>
-
-  <!-- Endpoint Zone -->
-  <rect x="50" y="250" width="700" height="150" fill="#f1f3f5" stroke="#adb5bd" stroke-width="2" rx="10"/>
-  <text x="400" y="280" font-family="Arial" font-size="16" font-weight="bold" text-anchor="middle">Endpoint (Windows/Linux)</text>
-  
-  <rect x="100" y="310" width="250" height="60" fill="#a5d8ff" stroke="#339af0" stroke-width="2" rx="5"/>
-  <text x="225" y="345" font-family="Arial" font-size="14" text-anchor="middle">OS Blocking (GPO / udev)</text>
-  
-  <rect x="450" y="310" width="250" height="60" fill="#b2f2bb" stroke="#51cf66" stroke-width="2" rx="5"/>
-  <text x="575" y="345" font-family="Arial" font-size="14" text-anchor="middle">Wazuh Agent (Sync & Alert)</text>
-
-  <!-- Definitions -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500">
+  <!-- Style -->
+  <style>
+    .box { rx: 10; ry: 10; stroke-width: 2; }
+    .text-title { font-family: sans-serif; font-weight: bold; font-size: 16px; }
+    .text-body { font-family: sans-serif; font-size: 14px; }
+    .arrow { stroke: #495057; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+  </style>
   <defs>
-    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L0,6 L9,3 z" fill="#495057" />
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#495057"/>
     </marker>
   </defs>
+
+  <!-- Wazuh Manager -->
+  <rect x="50" y="50" width="800" height="130" class="box" fill="#f8f9fa" stroke="#228be6"/>
+  <text x="450" y="80" class="text-title" text-anchor="middle" fill="#1971c2">Wazuh Manager (Control Plane)</text>
+  <rect x="100" y="100" width="300" height="60" class="box" fill="#fff3bf" stroke="#f59f00"/>
+  <text x="250" y="135" class="text-body" text-anchor="middle">usb_whitelist.txt (Centralized)</text>
+  <rect x="450" y="100" width="300" height="60" class="box" fill="#e7f5ff" stroke="#339af0"/>
+  <text x="600" y="135" class="text-body" text-anchor="middle">Wazuh Configuration Sync (Agent.conf)</text>
+
+  <!-- Sync Arrow -->
+  <path d="M 450 180 L 450 230" class="arrow"/>
+  <text x="460" y="210" class="text-body" fill="#868e96">Auto-Push Policy</text>
+
+  <!-- Endpoint Layer -->
+  <rect x="50" y="250" width="800" height="200" class="box" fill="#f1f3f5" stroke="#495057"/>
+  <text x="450" y="280" class="text-title" text-anchor="middle" fill="#343a40">Endpoint (Windows/Linux)</text>
+  
+  <rect x="100" y="310" width="300" height="100" class="box" fill="#d3f9d8" stroke="#2b8a3e"/>
+  <text x="250" y="350" class="text-title" text-anchor="middle">Native Enforcement</text>
+  <text x="250" y="380" class="text-body" text-anchor="middle">Windows GPO / Linux udev</text>
+
+  <rect x="450" y="310" width="300" height="100" class="box" fill="#ffec99" stroke="#f08c00"/>
+  <text x="600" y="350" class="text-title" text-anchor="middle">Wazuh Agent</text>
+  <text x="600" y="380" class="text-body" text-anchor="middle">Sync Policy + Alerting</text>
+
 </svg>
