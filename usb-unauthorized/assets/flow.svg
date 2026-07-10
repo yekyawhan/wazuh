@@ -14,7 +14,6 @@
 
   <rect x="30" y="30" width="1780" height="640" class="frame" />
 
-  <!-- Flow: Manager -> Config -> Agent -> OS -> Actions -> Final -->
   <rect x="50" y="300" width="180" height="60" class="manager" />
   <text x="140" y="340">Wazuh Manager</text>
   <line x1="230" y1="330" x2="280" y2="330" />
@@ -33,11 +32,11 @@
   <line x1="980" y1="330" x2="1030" y2="330" />
 
   <rect x="1030" y="300" width="220" height="60" class="action" />
-  <text x="1140" y="340">Rules / Registry Policy</text>
+  <text x="1140" y="340">Rules / Policy</text>
   <line x1="1250" y1="330" x2="1300" y2="330" />
 
   <rect x="1300" y="300" width="200" height="60" class="action" />
-  <text x="1400" y="340">Auto Reload/Apply</text>
+  <text x="1400" y="340">Auto Reload</text>
   <line x1="1500" y1="330" x2="1550" y2="330" />
 
   <rect x="1550" y="300" width="240" height="60" class="final" />
