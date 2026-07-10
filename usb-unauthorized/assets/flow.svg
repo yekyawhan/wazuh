@@ -14,6 +14,7 @@
   <rect x="770" y="180" width="300" height="80" />
   <text x="920" y="215">usb_whitelist.txt</text>
   <text x="920" y="240" class="label">(Centralized Config)</text>
+  
   <rect x="820" y="320" width="200" height="60" />
   <text x="920" y="360">Wazuh Agent</text>
   
