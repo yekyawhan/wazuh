@@ -1,39 +1,169 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500">
-  <!-- Style -->
-  <style>
-    .box { rx: 10; ry: 10; stroke-width: 2; }
-    .text-title { font-family: sans-serif; font-weight: bold; font-size: 16px; }
-    .text-body { font-family: sans-serif; font-size: 14px; }
-    .arrow { stroke: #495057; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
-  </style>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="900" height="950" viewBox="0 0 900 950" xmlns="http://www.w3.org/2000/svg">
+
   <defs>
-    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#495057"/>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#555"/>
     </marker>
+
+    <style>
+      .box {
+        fill: #ffffff;
+        stroke: #333;
+        stroke-width: 2;
+        rx: 12;
+        ry: 12;
+      }
+
+      .title {
+        font-family: Arial, sans-serif;
+        font-size: 24px;
+        font-weight: bold;
+        fill: #111;
+        text-anchor: middle;
+      }
+
+      .text {
+        font-family: Arial, sans-serif;
+        font-size: 20px;
+        fill: #222;
+        text-anchor: middle;
+      }
+
+      .line {
+        stroke: #555;
+        stroke-width: 3;
+        fill: none;
+        marker-end: url(#arrow);
+      }
+
+      .linux {
+        fill: #e8f5e9;
+        stroke: #2e7d32;
+      }
+
+      .windows {
+        fill: #e3f2fd;
+        stroke: #1565c0;
+      }
+
+      .central {
+        fill: #fff3e0;
+        stroke: #ef6c00;
+      }
+
+      .security {
+        fill: #fce4ec;
+        stroke: #c2185b;
+      }
+    </style>
   </defs>
 
+
+  <!-- Title -->
+  <text x="450" y="50" class="title">
+    Wazuh USB Whitelist Management Workflow
+  </text>
+
+
   <!-- Wazuh Manager -->
-  <rect x="50" y="50" width="800" height="130" class="box" fill="#f8f9fa" stroke="#228be6"/>
-  <text x="450" y="80" class="text-title" text-anchor="middle" fill="#1971c2">Wazuh Manager (Control Plane)</text>
-  <rect x="100" y="100" width="300" height="60" class="box" fill="#fff3bf" stroke="#f59f00"/>
-  <text x="250" y="135" class="text-body" text-anchor="middle">usb_whitelist.txt (Centralized)</text>
-  <rect x="450" y="100" width="300" height="60" class="box" fill="#e7f5ff" stroke="#339af0"/>
-  <text x="600" y="135" class="text-body" text-anchor="middle">Wazuh Configuration Sync (Agent.conf)</text>
+  <rect x="250" y="90" width="400" height="70" class="box"/>
+  <text x="450" y="135" class="text">
+    Wazuh Manager
+  </text>
 
-  <!-- Sync Arrow -->
-  <path d="M 450 180 L 450 230" class="arrow"/>
-  <text x="460" y="210" class="text-body" fill="#868e96">Auto-Push Policy</text>
 
-  <!-- Endpoint Layer -->
-  <rect x="50" y="250" width="800" height="200" class="box" fill="#f1f3f5" stroke="#495057"/>
-  <text x="450" y="280" class="text-title" text-anchor="middle" fill="#343a40">Endpoint (Windows/Linux)</text>
-  
-  <rect x="100" y="310" width="300" height="100" class="box" fill="#d3f9d8" stroke="#2b8a3e"/>
-  <text x="250" y="350" class="text-title" text-anchor="middle">Native Enforcement</text>
-  <text x="250" y="380" class="text-body" text-anchor="middle">Windows GPO / Linux udev</text>
+  <!-- Arrow -->
+  <path d="M450 160 L450 210" class="line"/>
 
-  <rect x="450" y="310" width="300" height="100" class="box" fill="#ffec99" stroke="#f08c00"/>
-  <text x="600" y="350" class="text-title" text-anchor="middle">Wazuh Agent</text>
-  <text x="600" y="380" class="text-body" text-anchor="middle">Sync Policy + Alerting</text>
+
+  <!-- Central Config -->
+  <rect x="200" y="220" width="500" height="90" class="box central"/>
+  <text x="450" y="260" class="text">
+    usb_whitelist.txt
+  </text>
+  <text x="450" y="290" class="text">
+    (Centralized Config)
+  </text>
+
+
+  <!-- Arrow -->
+  <path d="M450 310 L450 360" class="line"/>
+
+
+  <!-- Agent -->
+  <rect x="250" y="370" width="400" height="70" class="box"/>
+  <text x="450" y="415" class="text">
+    Wazuh Agent
+  </text>
+
+
+  <!-- Split Lines -->
+  <path d="M450 440 L450 480" class="line"/>
+
+  <path d="M450 480 L250 540" class="line"/>
+  <path d="M450 480 L650 540" class="line"/>
+
+
+  <!-- Linux -->
+  <rect x="100" y="550" width="300" height="80" class="box linux"/>
+  <text x="250" y="600" class="text">
+    Linux V2
+  </text>
+
+
+  <!-- Windows -->
+  <rect x="500" y="550" width="300" height="80" class="box windows"/>
+  <text x="650" y="600" class="text">
+    Windows V2
+  </text>
+
+
+  <!-- Linux Flow -->
+  <path d="M250 630 L250 680" class="line"/>
+
+  <rect x="100" y="690" width="300" height="80" class="box"/>
+  <text x="250" y="740" class="text">
+    Generate Rules
+  </text>
+
+
+  <path d="M250 770 L250 820" class="line"/>
+
+  <rect x="100" y="830" width="300" height="80" class="box"/>
+  <text x="250" y="880" class="text">
+    Auto Reload
+  </text>
+
+
+
+  <!-- Windows Flow -->
+  <path d="M650 630 L650 680" class="line"/>
+
+  <rect x="500" y="690" width="300" height="80" class="box"/>
+  <text x="650" y="730" class="text">
+    Generate Registry
+  </text>
+  <text x="650" y="755" class="text">
+    Policy
+  </text>
+
+
+  <path d="M650 770 L650 820" class="line"/>
+
+  <rect x="500" y="830" width="300" height="80" class="box"/>
+  <text x="650" y="880" class="text">
+    Auto Apply
+  </text>
+
+
+  <!-- Final Result -->
+  <path d="M250 910 L450 940" class="line"/>
+  <path d="M650 910 L450 940" class="line"/>
+
+  <rect x="250" y="940" width="400" height="70" class="box security"/>
+  <text x="450" y="985" class="text">
+    USB Allow / Block
+  </text>
 
 </svg>
