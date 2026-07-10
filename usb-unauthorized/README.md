@@ -37,7 +37,7 @@ curl -sL https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/e
 ```
 Linux — GitHub raw:
 ```bash
-curl -sL https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/enable-usb-sync.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/v2/install_usb_sync_linux.sh | sudo bash
 ```
 
 ### 2. Find a device's ID (to add it to the whitelist)
@@ -55,7 +55,7 @@ Prints a clean, de-duplicated list (hubs hidden).
 curl -sL https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/get_usb_info.sh | bash
 ```
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/v2/install_usb_sync_linux.sh | sudo bash
+need to update
 ```
 
 > CDN (`cdn.jsdelivr.net`) has no rate limit but caches for ~12h; GitHub raw is always current but limited to ~60 requests/hour per IP. Use CDN normally, raw when you need the newest version immediately.
