@@ -1,11 +1,37 @@
 <!-- Manager Side: Add this to /var/ossec/etc/shared/default/agent.conf -->
-<!-- This configures agents to run the sync script periodically -->
+<!-- This configures agents to run the sync script periodically.          -->
+<!--                                                                       -->
+<!-- ============================ PREREQUISITES ========================== -->
+<!-- 1) REMOTE COMMANDS MUST BE ENABLED ON EACH AGENT (off by default!).   -->
+<!--    Without this, Wazuh SILENTLY IGNORES the <command> below and the   -->
+<!--    sync NEVER runs. On every agent, add to local_internal_options.conf-->
+<!--    then restart the agent:                                            -->
+<!--      Windows: C:\Program Files (x86)\ossec-agent\local_internal_options.conf -->
+<!--               logcollector.remote_commands=1                          -->
+<!--               (then: Restart-Service WazuhSvc)                        -->
+<!--      Linux:   /var/ossec/etc/local_internal_options.conf              -->
+<!--               logcollector.remote_commands=1                          -->
+<!--               (then: systemctl restart wazuh-agent)                   -->
+<!--                                                                       -->
+<!-- 2) DEPLOY THE SYNC SCRIPTS to each agent's AR bin folder:             -->
+<!--      Windows: C:\Program Files (x86)\ossec-agent\active-response\bin\hybrid_sync_usb.ps1 -->
+<!--      Linux:   /var/ossec/active-response/bin/hybrid_sync_usb_linux.sh (chmod +x) -->
+<!--                                                                       -->
+<!-- 3) PUT usb_whitelist.txt in the manager's shared group folder so it   -->
+<!--    is pushed to agents:  /var/ossec/etc/shared/default/usb_whitelist.txt -->
+<!-- ==================================================================== -->
 
 <agent_config os="Windows">
+  <!-- run the whitelist sync every hour -->
   <localfile>
     <log_format>command</log_format>
     <command>powershell -ExecutionPolicy Bypass -File "C:\Program Files (x86)\ossec-agent\active-response\bin\hybrid_sync_usb.ps1"</command>
     <frequency>3600</frequency>
+  </localfile>
+  <!-- forward Kernel-PnP so blocked installs (Event ID 219) raise an alert -->
+  <localfile>
+    <location>Microsoft-Windows-Kernel-PnP/Configuration</location>
+    <log_format>eventchannel</log_format>
   </localfile>
 </agent_config>
 

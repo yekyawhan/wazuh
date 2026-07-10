@@ -8,7 +8,7 @@ function Write-Log($message) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $logMessage = "$timestamp - hybrid_sync_usb - $message"
     Write-Host $logMessage
-    
+
     # Retry mechanism for file locking (Wazuh agent might be reading the log)
     $retryCount = 0
     $maxRetries = 3
@@ -32,32 +32,37 @@ if (-not (Test-Path $whitelistFile)) {
 $allowedIds = Get-Content $whitelistFile | Where-Object { $_ -match "\S" -and $_ -notmatch "^#" }
 
 $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
-$allowPath = "$regPath\AllowInstallationOfMatchingDeviceIDs"
+# FIX: Windows reads the allow-list from the "AllowDeviceIDs" SUBKEY - NOT from
+# "AllowInstallationOfMatchingDeviceIDs" (that string is the policy's display
+# name, not a real registry key). Writing IDs to the wrong subkey left the
+# whitelist empty, so even the approved device was blocked.
+$allowPath = "$regPath\AllowDeviceIDs"
 
 # Create base keys if missing
 if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
 if (-not (Test-Path $allowPath)) { New-Item -Path $allowPath -Force | Out-Null }
 
-# Enable Device Installation Restrictions (Block All)
+# Enable Device Installation Restrictions (Block All + turn the allow-list on)
 Set-ItemProperty -Path $regPath -Name "DenyUnspecified" -Value 1 -Type DWord
 Set-ItemProperty -Path $regPath -Name "AllowDeviceIDs" -Value 1 -Type DWord
+Set-ItemProperty -Path $regPath -Name "AllowDeviceIDsRetroactive" -Value 1 -Type DWord
 
 # Clear existing whitelist values
 Get-Item -Path $allowPath | Select-Object -ExpandProperty Property | ForEach-Object {
     Remove-ItemProperty -Path $allowPath -Name $_ -Force
 }
 
-# Add new whitelist IDs from Centralized file
+# Add new whitelist IDs from Centralized file (Windows expects 1-indexed REG_SZ)
 $i = 1
 $processedIds = @()
 foreach ($id in $allowedIds) {
     $cleanId = $id.Trim()
-    
+
     # Handle Linux format (0951:1666) -> Windows format (USB\VID_0951&PID_1666)
     if ($cleanId -match "^([0-9a-fA-F]{4}):([0-9a-fA-F]{4})$") {
         $cleanId = "USB\VID_$($matches[1])&PID_$($matches[2])"
     }
-    
+
     Set-ItemProperty -Path $allowPath -Name $i.ToString() -Value $cleanId -Type String
     $processedIds += $cleanId
     $i++
