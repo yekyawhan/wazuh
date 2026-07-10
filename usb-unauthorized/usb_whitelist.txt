@@ -1,5 +1,0 @@
-# usb_whitelist.txt
-# Place this file in /var/ossec/etc/shared/default/ on the Wazuh Manager
-# Add one USB Hardware ID per line.
-USB\VID_0951&PID_1666
-USB\VID_0781&PID_5591
