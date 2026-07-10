@@ -1,26 +1,52 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg width="400" height="400" xmlns="http://www.w3.org/2000/svg">
+<svg width="1840" height="1040" xmlns="http://www.w3.org/2000/svg" style="background-color: #1a1a1a;">
   <style>
-    rect { fill: white; stroke: black; stroke-width: 1; }
-    text { font-family: Arial; font-size: 12px; text-anchor: middle; }
-    line { stroke: black; stroke-width: 1; }
+    rect { fill: #2d2d2d; stroke: #4a90e2; stroke-width: 2; rx: 8; ry: 8; }
+    text { font-family: 'Segoe UI', Arial; font-size: 24px; fill: #ffffff; text-anchor: middle; }
+    line { stroke: #4a90e2; stroke-width: 3; stroke-dasharray: 5,5; }
+    .label { font-size: 18px; fill: #a0a0a0; }
   </style>
-  <rect x="150" y="20" width="100" height="30" />
-  <text x="200" y="40">Wazuh Manager</text>
-  <line x1="200" y1="50" x2="200" y2="80" />
   
-  <rect x="125" y="80" width="150" height="40" />
-  <text x="200" y="105">usb_whitelist.txt</text>
-  <line x1="200" y1="120" x2="200" y2="150" />
+  <!-- Boxes -->
+  <rect x="820" y="50" width="200" height="60" />
+  <text x="920" y="90">Wazuh Manager</text>
   
-  <rect x="150" y="150" width="100" height="30" />
-  <text x="200" y="170">Wazuh Agent</text>
+  <rect x="770" y="180" width="300" height="80" />
+  <text x="920" y="215">usb_whitelist.txt</text>
+  <text x="920" y="240" class="label">(Centralized Config)</text>
+  <rect x="820" y="320" width="200" height="60" />
+  <text x="920" y="360">Wazuh Agent</text>
   
-  <line x1="200" y1="180" x2="100" y2="220" />
-  <line x1="200" y1="180" x2="300" y2="220" />
+  <rect x="520" y="480" width="200" height="60" />
+  <text x="620" y="520">Linux V2</text>
   
-  <rect x="50" y="220" width="100" height="30" />
-  <text x="100" y="240">Linux V2</text>
-  <rect x="250" y="220" width="100" height="30" />
-  <text x="300" y="240">Windows V2</text>
+  <rect x="1120" y="480" width="200" height="60" />
+  <text x="1220" y="520">Windows V2</text>
+  
+  <rect x="520" y="620" width="200" height="60" />
+  <text x="620" y="660">Generate Rules</text>
+  
+  <rect x="1120" y="620" width="280" height="60" />
+  <text x="1260" y="660">Generate Registry Policy</text>
+  
+  <rect x="520" y="760" width="200" height="60" />
+  <text x="620" y="800">Auto Reload</text>
+  
+  <rect x="1120" y="760" width="200" height="60" />
+  <text x="1220" y="800">Auto Apply</text>
+  
+  <rect x="820" y="900" width="200" height="60" style="fill: #4a90e2; stroke: white;"/>
+  <text x="920" y="940" style="fill: white; font-weight: bold;">USB Allow / Block</text>
+  
+  <!-- Lines -->
+  <line x1="920" y1="110" x2="920" y2="180"/>
+  <line x1="920" y1="260" x2="920" y2="320"/>
+  <line x1="920" y1="380" x2="620" y2="480"/>
+  <line x1="920" y1="380" x2="1260" y2="480"/>
+  <line x1="620" y1="540" x2="620" y2="620"/>
+  <line x1="1260" y1="540" x2="1260" y2="620"/>
+  <line x1="620" y1="680" x2="620" y2="760"/>
+  <line x1="1260" y1="680" x2="1260" y2="760"/>
+  <line x1="620" y1="820" x2="920" y2="900"/>
+  <line x1="1260" y1="820" x2="920" y2="900"/>
 </svg>
