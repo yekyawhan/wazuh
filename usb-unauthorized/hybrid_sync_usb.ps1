@@ -68,5 +68,19 @@ foreach ($id in $allowedIds) {
     $i++
 }
 
+# STORAGE-LAYER ENABLERS (required, or approved drives never MOUNT).
+# A USB drive is a 3-node stack: USB device -> USBSTOR disk -> STORAGE volume,
+# each gated separately by DenyUnspecified. Whitelisting only USB\VID&PID allows
+# the USB node, but the disk + volume children stay blocked (Code 28) and no
+# drive letter appears. These two generic IDs allow the disk + volume LAYERS.
+# SAFE: an unauthorized drive is blocked at its USB\VID&PID parent, so its
+# disk/volume children are never created - these only ever apply to a drive
+# already allowed at the USB layer. (Class-based allows do NOT work here: a
+# blocked node has no class yet, so only DEVICE-ID allows can match it.)
+foreach ($storId in @("USBSTOR\GenDisk", "STORAGE\Volume")) {
+    Set-ItemProperty -Path $allowPath -Name $i.ToString() -Value $storId -Type String
+    $i++
+}
+
 gpupdate /force | Out-Null
 Write-Log "Success: USB GPO updated from Wazuh Centralized Config. Authorized IDs: $($processedIds -join ', ')"
