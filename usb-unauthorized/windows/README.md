@@ -21,7 +21,29 @@ Mirrors the Linux V2 implementation in `../v2/`.
 
 ## Quick Start
 
-### Install
+### One-line install (recommended)
+
+From any PowerShell (will auto-elevate):
+
+```powershell
+$iwr='https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip';$tmp=(Join-Path $env:TEMP ([guid]::NewGuid()))+'.zip';[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $iwr -OutFile $tmp -UseBasicParsing;New-Item -ItemType Directory -Path 'C:\ProgramData\Wazuh' -Force | Out-Null;Expand-Archive $tmp -DestinationPath 'C:\ProgramData\Wazuh' -Force;Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','C:\ProgramData\Wazuh\usb-unauthorized-windows-v2\install\install_usb_sync_windows.ps1'
+```
+
+If you already have an **admin** PowerShell open, drop the `Start-Process -Verb RunAs` part:
+
+```powershell
+$iwr='https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip';$tmp=(Join-Path $env:TEMP ([guid]::NewGuid()))+'.zip';[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $iwr -OutFile $tmp -UseBasicParsing;New-Item -ItemType Directory -Path 'C:\ProgramData\Wazuh' -Force | Out-Null;Expand-Archive $tmp -DestinationPath 'C:\ProgramData\Wazuh' -Force;powershell -NoProfile -ExecutionPolicy Bypass -File 'C:\ProgramData\Wazuh\usb-unauthorized-windows-v2\install\install_usb_sync_windows.ps1'
+```
+
+Direct GitHub URL (no CDN cache, slightly slower):
+
+```powershell
+$iwr='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip'
+```
+
+(substitute the same `iwr` path and use the rest of the one-liner above)
+
+### Install from local source
 
 ```cmd
 cd windows
@@ -32,11 +54,11 @@ Auto-elevates to Administrator. First sync runs immediately.
 
 ### Uninstall
 
-```cmd
-uninstall.cmd
+```powershell
+& 'C:\ProgramData\Wazuh\usb-unauthorized-windows-v2\uninstall\uninstall_usb_sync_windows.ps1' --purge-logs
 ```
 
-Add `--purge-logs` to wipe `C:\ProgramData\Wazuh\Logs\UsbSync`.
+Or `cd windows && uninstall.cmd` from a local source tree.
 
 ---
 
