@@ -45,12 +45,14 @@ function Install-UsbSync {
         }
 
         # 2. Register Scheduled Task
-        #    Two triggers: at startup (watcher survives reboots) + on a repeating
-        #    schedule (fallback resync if a file-change event is ever missed).
+        #    Resolve to absolute path: SYSTEM account has no current directory
+        #    if the working dir is a per-user path, and a relative path here
+        #    would be resolved against that — causing exit 267011.
+        $taskCwd = (Resolve-Path -LiteralPath $AppRoot).ProviderPath
         $action = New-ScheduledTaskAction `
             -Execute 'powershell.exe' `
-            -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$AppRoot\hybrid_sync_usb_v2.ps1`" --watch" `
-            -WorkingDirectory $AppRoot
+            -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$taskCwd\hybrid_sync_usb_v2.ps1`" --watch" `
+            -WorkingDirectory $taskCwd
         $triggerBoot = New-ScheduledTaskTrigger -AtStartup
         $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
         $settings = New-ScheduledTaskSettingsSet `
