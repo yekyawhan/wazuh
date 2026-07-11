@@ -1,0 +1,46 @@
+<!-- Wazuh rules for USB Unauthorized Device Blocking (Windows V2 + Linux V2) -->
+<!--                                                                           -->
+<!-- Install on the MANAGER:                                                   -->
+<!--   cp usb-rule.xml /var/ossec/etc/rules/usb-rule.xml                       -->
+<!--   chown wazuh:wazuh /var/ossec/etc/rules/usb-rule.xml                     -->
+<!--   systemctl restart wazuh-manager                                         -->
+<!--                                                                           -->
+<!-- These rules raise alerts when:                                            -->
+<!--   - the endpoint sync runs (audit trail)                                  -->
+<!--   - Windows blocks a USB device (Kernel-PnP Event ID 219)                 -->
+<!--   - Linux blocks a USB device (udev deny log line)                        -->
+<!--   - repeated block attempts from one host (high risk)                     -->
+
+<group name="usb,device-control,">
+
+  <!-- sync ran successfully on an agent (audit) -->
+  <rule id="100030" level="3">
+    <match>hybrid_sync_usb</match>
+    <description>USB whitelist sync ran on agent.</description>
+    <group>usb_sync,</group>
+  </rule>
+
+  <!-- Windows: GPO/Device-Install policy blocked a device (Event ID 219) -->
+  <rule id="100032" level="8">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^219$</field>
+    <description>Unauthorized USB device blocked by OS policy (Windows).</description>
+    <group>usb_blocked,pci_dss_10.2.4,</group>
+  </rule>
+
+  <!-- Linux: udev blocked a device (matches the logger line the script emits) -->
+  <rule id="100031" level="8">
+    <decoded_as>syslog</decoded_as>
+    <match>usb-block: DENIED</match>
+    <description>Unauthorized USB device blocked by OS policy (Linux).</description>
+    <group>usb_blocked,</group>
+  </rule>
+
+  <!-- repeated attempts = higher severity -->
+  <rule id="100035" level="12" frequency="5" timeframe="60">
+    <if_matched_group>usb_blocked</if_matched_group>
+    <description>Repeated unauthorized USB attempts on one host (high risk).</description>
+    <group>usb_blocked,pci_dss_10.2.4,</group>
+  </rule>
+
+</group>
