@@ -12,6 +12,21 @@ Import-Module (Join-Path $AppRoot 'modules\Logger.psm1')   -Force
 Import-Module (Join-Path $AppRoot 'modules\Utils.psm1')    -Force
 Import-Module (Join-Path $AppRoot 'modules\Policy.psm1')   -Force
 
+<#
+.SYNOPSIS
+    Uninstalls the Wazuh Hybrid USB Sync.
+
+.DESCRIPTION
+    Idempotent. Stops and unregisters the scheduled task, restores the default
+    device-install policy (all-allowed), and optionally purges logs. Must run
+    elevated.
+
+.PARAMETER PurgeLogs
+    Also delete C:\ProgramData\Wazuh\Logs\UsbSync.
+
+.OUTPUTS
+    [int] 0 success, 1 not-admin, 2 uninstall error.
+#>
 function Uninstall-UsbSync {
     [CmdletBinding()]
     param(

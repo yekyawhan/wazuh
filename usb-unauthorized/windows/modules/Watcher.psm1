@@ -8,6 +8,19 @@ $script:Watcher = $null
 $script:DebounceTimer = $null
 $script:DebounceSeconds = 3
 
+<#
+.SYNOPSIS
+    Watches the whitelist file and fires OnChange (debounced) on modification.
+
+.PARAMETER Path
+    Full path to usb_whitelist.txt.
+
+.PARAMETER OnChange
+    Scriptblock invoked after a 3-second debounce following any change.
+
+.OUTPUTS
+    [bool] true if the watcher started.
+#>
 function Start-UsbWhitelistWatcher {
     [CmdletBinding()]
     param(
@@ -52,6 +65,10 @@ function Start-UsbWhitelistWatcher {
     return $true
 }
 
+<#
+.SYNOPSIS
+    Stops and disposes the active FileSystemWatcher and its debounce timer.
+#>
 function Stop-UsbWhitelistWatcher {
     [CmdletBinding()]
     param()
@@ -68,6 +85,14 @@ function Stop-UsbWhitelistWatcher {
     }
 }
 
+<#
+.SYNOPSIS
+    Forces a computer-group-policy refresh so the device-install policy applies.
+
+.DESCRIPTION
+    Runs gpupdate /target:computer /force. Non-fatal on failure (the policy is
+    already written to the registry and takes effect on the next refresh).
+#>
 function Invoke-GpUpdate {
     [CmdletBinding()]
     param()

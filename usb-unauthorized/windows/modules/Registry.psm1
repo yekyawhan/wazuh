@@ -5,6 +5,17 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+<#
+.SYNOPSIS
+    Snapshots the current device-install policy.
+
+.DESCRIPTION
+    Captures whether the policy key existed, AllowDeviceIDsEnabled, and the
+    AllowDeviceIDs list. Pass the result to Restore-PolicyState to roll back.
+
+.OUTPUTS
+    [hashtable] { Existed, AllowEnabled, AllowList, PolicyRoot, AllowDeviceIdsPath, Timestamp }
+#>
 function Backup-PolicyState {
     [CmdletBinding()]
     param()
@@ -33,6 +44,13 @@ function Backup-PolicyState {
     return $state
 }
 
+<#
+.SYNOPSIS
+    Restores a policy snapshot captured by Backup-PolicyState.
+
+.PARAMETER State
+    The hashtable returned by Backup-PolicyState.
+#>
 function Restore-PolicyState {
     [CmdletBinding()]
     param(
@@ -56,6 +74,16 @@ function Restore-PolicyState {
     }
 }
 
+<#
+.SYNOPSIS
+    Verifies the live registry matches the expected allow-list.
+
+.PARAMETER ExpectedDeviceIds
+    The device IDs that should be present (unsorted; compared as a set).
+
+.OUTPUTS
+    [bool] true if enabled + list matches exactly.
+#>
 function Test-PolicyState {
     [CmdletBinding()]
     [OutputType([bool])]

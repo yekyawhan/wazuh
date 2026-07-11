@@ -9,6 +9,16 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Internal: detect which format a line is in
+<#
+.SYNOPSIS
+    Detects whether a whitelist line is Windows- or Linux-formatted.
+
+.PARAMETER Line
+    A single whitelist line (leading/trailing spaces allowed).
+
+.OUTPUTS
+    [string] 'Windows', 'Linux', or $null if unrecognized.
+#>
 function Resolve-DeviceFormat {
     [CmdletBinding()]
     [OutputType([string])]
@@ -20,6 +30,16 @@ function Resolve-DeviceFormat {
 }
 
 # Internal: convert Linux "0951:1666" to Windows "USB\VID_0951&PID_1666"
+<#
+.SYNOPSIS
+    Converts a Linux "VID:PID" string to the Windows registry device ID form.
+
+.PARAMETER LinuxId
+    e.g. "0951:1666" or "951:166" (short values are zero-padded).
+
+.OUTPUTS
+    [string] e.g. "USB\VID_0951&PID_1666", or $null if malformed.
+#>
 function ConvertTo-WindowsDeviceId {
     [CmdletBinding()]
     [OutputType([string])]
@@ -31,6 +51,21 @@ function ConvertTo-WindowsDeviceId {
     return "USB\VID_$vid&PID_$pid"
 }
 
+<#
+.SYNOPSIS
+    Reads and validates a usb_whitelist.txt file.
+
+.DESCRIPTION
+    Supports both "USB\VID_xxxx&PID_xxxx" (Windows) and "xxxx:xxxx" (Linux)
+    formats per line. Comments (#) and blank lines are skipped. Each line is
+    returned as an object with a Valid flag and reason.
+
+.PARAMETER Path
+    Full path to the whitelist file.
+
+.OUTPUTS
+    [object[]] each: { OriginalLine, DeviceId, SourceFormat, Valid, Reason, LineNumber }
+#>
 function Read-UsbWhitelist {
     [CmdletBinding()]
     param(
@@ -72,12 +107,33 @@ function Read-UsbWhitelist {
     return $results
 }
 
+<#
+.SYNOPSIS
+    Returns only the valid entries from a whitelist file.
+
+.PARAMETER Path
+    Full path to the whitelist file.
+#>
 function Get-ValidWhitelist {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Path)
     return @(Read-UsbWhitelist -Path $Path | Where-Object { $_.Valid })
 }
 
+<#
+.SYNOPSIS
+    Reads a whitelist and returns deduplicated valid device IDs.
+
+.DESCRIPTION
+    Linux and Windows forms of the same device collapse to one entry because
+    both normalize to the Windows registry device ID.
+
+.PARAMETER Path
+    Full path to the whitelist file.
+
+.OUTPUTS
+    [object[]] unique valid entries.
+#>
 function Merge-Whitelist {
     [CmdletBinding()]
     param(

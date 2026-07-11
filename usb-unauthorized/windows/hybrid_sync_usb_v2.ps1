@@ -16,6 +16,18 @@ Import-Module (Join-Path $ScriptRoot 'modules\Registry.psm1') -Force
 Import-Module (Join-Path $ScriptRoot 'modules\Policy.psm1')   -Force
 Import-Module (Join-Path $ScriptRoot 'modules\Watcher.psm1')  -Force
 
+<#
+.SYNOPSIS
+    Performs a one-shot sync: read whitelist, apply allow-list policy, refresh.
+
+.DESCRIPTION
+    Reads the Wazuh-shared usb_whitelist.txt, parses/dedupes device IDs, and
+    applies them via the device-install allow-list. Empty whitelist => block
+    all. Runs gpupdate /force afterward. Logs to file + Event Log.
+
+.OUTPUTS
+    [bool] true on success.
+#>
 function Invoke-HybridUsbSync {
     [CmdletBinding()]
     param()
@@ -53,6 +65,16 @@ function Invoke-HybridUsbSync {
     }
 }
 
+<#
+.SYNOPSIS
+    Runs the sync once, then watches the whitelist file for changes.
+
+.DESCRIPTION
+    Intended for the scheduled task. Performs an initial sync, starts a
+    FileSystemWatcher (3s debounce) that re-syncs on edit, and blocks until
+    Ctrl+C (stopping the watcher cleanly on exit).
+
+#>
 function Start-HybridUsbWatcher {
     [CmdletBinding()]
     param()

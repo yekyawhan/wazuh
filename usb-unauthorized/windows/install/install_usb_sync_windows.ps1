@@ -11,6 +11,18 @@ $AppRoot    = Split-Path -Parent $ScriptRoot
 Import-Module (Join-Path $AppRoot 'modules\Logger.psm1')   -Force
 Import-Module (Join-Path $AppRoot 'modules\Utils.psm1')    -Force
 
+<#
+.SYNOPSIS
+    Installs the Wazuh Hybrid USB Sync on a Windows agent.
+
+.DESCRIPTION
+    Idempotent. Creates the app/log directories, registers the scheduled task
+    (AtStartup, SYSTEM, restart-on-failure), runs a first sync, and performs a
+    health check. Must run elevated.
+
+.OUTPUTS
+    [int] 0 success, 1 not-admin, 2 install error.
+#>
 function Install-UsbSync {
     [CmdletBinding()]
     param()

@@ -46,6 +46,18 @@ $global:UsbSync = @{
 }
 
 # Resolve whitelist path at access time (so any agent install layout works)
+<#
+.SYNOPSIS
+    Resolves the path to the Wazuh-distributed usb_whitelist.txt.
+
+.DESCRIPTION
+    Prefers the x86 agent path (C:\Program Files (x86)\ossec-agent\shared),
+    falling back to the Program Files path. Returns the first existing parent
+    dir's path, else the x86 path.
+
+.OUTPUTS
+    [string] full path to usb_whitelist.txt.
+#>
 function Get-UsbWhitelistPath {
     [CmdletBinding()]
     param()

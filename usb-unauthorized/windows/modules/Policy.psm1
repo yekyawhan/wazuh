@@ -5,6 +5,21 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+<#
+.SYNOPSIS
+    Applies the USB allow-list to the device-install policy.
+
+.DESCRIPTION
+    Atomic: backs up the current policy, writes AllowDeviceIDsEnabled + the
+    device list, verifies the result, and restores the backup if anything
+    mismatches. An empty list with Enabled=1 means "block all".
+
+.PARAMETER DeviceIds
+    Windows-form device IDs to allow. Pass @() to block everything.
+
+.OUTPUTS
+    [bool] true on success.
+#>
 function Set-UsbAllowList {
     [CmdletBinding()]
     param(
@@ -45,6 +60,14 @@ function Set-UsbAllowList {
     return $true
 }
 
+<#
+.SYNOPSIS
+    Removes the allow-list policy entirely.
+
+.DESCRIPTION
+    Use only during uninstall. Restores Windows' default (all-allowed) device
+    install behavior. Does NOT leave a block-all state.
+#>
 function Remove-UsbAllowList {
     [CmdletBinding()]
     param()
