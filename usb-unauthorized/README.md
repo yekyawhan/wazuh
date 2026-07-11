@@ -24,11 +24,11 @@ Deploys the sync script, enables the required setting, restarts the agent, and r
 
 **Windows** — CDN (recommended):
 ```powershell
-$iwr='https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip';$tmp=Join-Path $env:TEMP ([guid]::NewGuid())+'.zip';[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $iwr -OutFile $tmp -UseBasicParsing;Expand-Archive $tmp -DestinationPath 'C:\ProgramData\Wazuh' -Force;& 'C:\ProgramData\Wazuh\usb-unauthorized-windows-v2\install.cmd'
+$iwr='https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip';$tmp=Join-Path $env:TEMP ([guid]::NewGuid())+'.zip';[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $iwr -OutFile $tmp -UseBasicParsing;Expand-Archive $tmp -DestinationPath 'C:\ProgramData\Wazuh' -Force;Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','C:\ProgramData\Wazuh\usb-unauthorized-windows-v2\install\install_usb_sync_windows.ps1'
 ```
 Windows — GitHub raw:
 ```powershell
-$iwr='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip';$tmp=Join-Path $env:TEMP ([guid]::NewGuid())+'.zip';[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $iwr -OutFile $tmp -UseBasicParsing;Expand-Archive $tmp -DestinationPath 'C:\ProgramData\Wazuh' -Force;& 'C:\ProgramData\Wazuh\usb-unauthorized-windows-v2\install.cmd'
+$iwr='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip';$tmp=Join-Path $env:TEMP ([guid]::NewGuid())+'.zip';[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $iwr -OutFile $tmp -UseBasicParsing;Expand-Archive $tmp -DestinationPath 'C:\ProgramData\Wazuh' -Force;Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','C:\ProgramData\Wazuh\usb-unauthorized-windows-v2\install\install_usb_sync_windows.ps1'
 ```
 
 **Linux** — CDN (recommended):
