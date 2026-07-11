@@ -1,5 +1,5 @@
 @echo off
-REM uninstall.cmd — auto-elevate, run uninstaller. Pass --purge-logs to wipe logs.
+REM uninstall.cmd — auto-elevate, run uninstaller. Pass --purge-logs or --purge-all.
 setlocal
 set "SCRIPT_DIR=%~dp0"
 set "PS_SCRIPT=%SCRIPT_DIR%uninstall\uninstall_usb_sync_windows.ps1"

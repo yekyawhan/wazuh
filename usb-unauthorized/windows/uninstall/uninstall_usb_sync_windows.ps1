@@ -30,7 +30,8 @@ Import-Module (Join-Path $AppRoot 'modules\Policy.psm1')   -Force
 function Uninstall-UsbSync {
     [CmdletBinding()]
     param(
-        [switch]$PurgeLogs
+        [switch]$PurgeLogs,
+        [switch]$PurgeAll
     )
 
     Initialize-Logger -LogDir $UsbSync.LogDir -LogFileName $UsbSync.InstallLogFile `
@@ -52,14 +53,21 @@ function Uninstall-UsbSync {
             Write-LogInfo "Task not present (already uninstalled). Skipping."
         }
 
-        # 2. Restore default policy
+        # 2. Restore default policy (Remove-UsbAllowList deletes the Restrictions key
+        #    entirely so Windows returns fully to "all devices allowed" state)
         try { Remove-UsbAllowList }
         catch { Write-LogWarning "Policy remove failed: $($_.Exception.Message)" }
 
         # 3. Optional log purge
-        if ($PurgeLogs -and (Test-Path -LiteralPath $UsbSync.LogDir)) {
+        if (($PurgeLogs -or $PurgeAll) -and (Test-Path -LiteralPath $UsbSync.LogDir)) {
             Remove-Item -LiteralPath (Join-Path $UsbSync.LogDir '*') -Recurse -Force -ErrorAction SilentlyContinue
             Write-LogInfo 'Logs purged.'
+        }
+
+        # 4. --purge-all: also wipe the app install dir (C:\ProgramData\Wazuh\UsbSync)
+        if ($PurgeAll -and (Test-Path -LiteralPath $UsbSync.AppRoot)) {
+            Remove-Item -LiteralPath $UsbSync.AppRoot -Recurse -Force -ErrorAction SilentlyContinue
+            Write-LogInfo "App data purged: $($UsbSync.AppRoot)"
         }
 
         Write-LogAudit "Uninstall complete. Version $($UsbSync.Version)"
@@ -73,5 +81,6 @@ function Uninstall-UsbSync {
 
 if ($MyInvocation.InvocationName -ne '.') {
     $purge = $args -contains '--purge-logs'
-    exit (Uninstall-UsbSync -PurgeLogs:$purge)
+    $purgeAll = $args -contains '--purge-all'
+    exit (Uninstall-UsbSync -PurgeLogs:$purge -PurgeAll:$purgeAll)
 }

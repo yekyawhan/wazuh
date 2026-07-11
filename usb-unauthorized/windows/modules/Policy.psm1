@@ -80,6 +80,21 @@ function Remove-UsbAllowList {
             Remove-ItemProperty -LiteralPath $root -Name $UsbSync.AllowDeviceIdsEnabled -ErrorAction SilentlyContinue
             Remove-ItemProperty -LiteralPath $root -Name $UsbSync.AllowDeviceIds        -ErrorAction SilentlyContinue
             Remove-ItemProperty -LiteralPath $root -Name $UsbSync.DenyUnspecified       -ErrorAction SilentlyContinue
+            # After all values removed, delete the now-empty parent key so Windows
+            # returns fully to "all devices allowed" default state.
+            if (-not (Get-Item -LiteralPath $root -ErrorAction SilentlyContinue) -or
+                @((Get-Item -LiteralPath $root).GetValueNames()).Count -eq 0) {
+                Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+                # Walk up: also drop DeviceInstall key if it's now empty (it usually has children from other policies)
+                # but only if no sibling values remain
+                $parent = Split-Path -LiteralPath $root -Parent
+                if (Test-Path -LiteralPath $parent) {
+                    $siblings = (Get-Item -LiteralPath $parent).GetSubKeyNames()
+                    if ($siblings -notcontains 'Restrictions') {
+                        # parent DeviceInstall still has other subkeys (common) - leave it
+                    }
+                }
+            }
         }
         Write-LogAudit "Allow-list removed (uninstall)."
     } catch {
