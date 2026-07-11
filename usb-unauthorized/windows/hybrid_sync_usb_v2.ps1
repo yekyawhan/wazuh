@@ -7,9 +7,11 @@ $ErrorActionPreference = 'Stop'
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $ScriptRoot 'config\config.ps1')
 
-Import-Module (Join-Path $ScriptRoot 'modules\Logger.psm1') -Force
-Import-Module (Join-Path $ScriptRoot 'modules\Utils.psm1')  -Force
-Import-Module (Join-Path $ScriptRoot 'modules\Parser.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\Logger.psm1')   -Force
+Import-Module (Join-Path $ScriptRoot 'modules\Utils.psm1')    -Force
+Import-Module (Join-Path $ScriptRoot 'modules\Parser.psm1')   -Force
+Import-Module (Join-Path $ScriptRoot 'modules\Registry.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\Policy.psm1')   -Force
 
 function Invoke-HybridUsbSync {
     [CmdletBinding()]
@@ -30,8 +32,12 @@ function Invoke-HybridUsbSync {
         $entries = Merge-Whitelist -Path $whitelistPath
         Write-LogInfo "Parsed $($entries.Count) unique device(s)."
 
-        # Sprint 2: hand off to Registry engine
-        # Update-DeviceInstallPolicy -DeviceIds $entries.DeviceId
+        if ($entries.Count -eq 0) {
+            Write-LogWarning "Whitelist is empty. Removing allow-list policy (default-deny)."
+            Remove-UsbAllowList
+        } else {
+            Set-UsbAllowList -DeviceIds $entries.DeviceId
+        }
 
         Write-LogAudit "Sync completed. Devices: $($entries.Count)"
         return 0

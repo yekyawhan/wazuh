@@ -21,12 +21,12 @@ $UsbSync = @{
     WatcherLogFile     = 'watcher.log'
     StateFile          = 'last-state.json'
 
-    # Registry policy
-    PolicyRoot         = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions'
-    DenyDevicesRoot    = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions\DenyDeviceIDs'
-    DenyDevicesEnabled = 'DenyDeviceIDsEnabled'
-    DenyDevicesList    = 'DenyDeviceIDs'
-    BackupSubKey       = 'V2Backup'
+    # Registry policy (allow-list mode)
+    PolicyRoot            = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions'
+    AllowDeviceIdsRoot    = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions'
+    AllowDeviceIdsEnabled = 'AllowDeviceIDsEnabled'
+    AllowDeviceIds        = 'AllowDeviceIDs'
+    BackupSubKey          = 'V2Backup'
 
     # Scheduled task
     TaskName           = 'Wazuh Hybrid USB Sync'
