@@ -87,7 +87,7 @@ function Read-UsbWhitelist {
         if (-not $fmt) {
             $results.Add([pscustomobject]@{
                 OriginalLine = $raw; DeviceId = $null; SourceFormat = 'Invalid'
-                Valid = $false; Reason = "line $lineNo — unrecognized format"; LineNumber = $lineNo
+                Valid = $false; Reason = "line $lineNo - unrecognized format"; LineNumber = $lineNo
             })
             continue
         }
@@ -95,7 +95,7 @@ function Read-UsbWhitelist {
         if (-not $devId) {
             $results.Add([pscustomobject]@{
                 OriginalLine = $raw; DeviceId = $null; SourceFormat = $fmt
-                Valid = $false; Reason = "line $lineNo — convert failed"; LineNumber = $lineNo
+                Valid = $false; Reason = "line $lineNo - convert failed"; LineNumber = $lineNo
             })
             continue
         }
