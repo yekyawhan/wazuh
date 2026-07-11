@@ -24,11 +24,11 @@ Deploys the sync script, enables the required setting, restarts the agent, and r
 
 **Windows** — CDN (recommended):
 ```powershell
-[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/enable-usb-sync.ps1 -UseBasicParsing | iex
+$iwr='https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip';$tmp=Join-Path $env:TEMP ([guid]::NewGuid())+'.zip';[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $iwr -OutFile $tmp -UseBasicParsing;Expand-Archive $tmp -DestinationPath 'C:\ProgramData\Wazuh' -Force;& 'C:\ProgramData\Wazuh\usb-unauthorized-windows-v2\install.cmd'
 ```
-Windows — GitHub raw (if CDN is cached/stale):
+Windows — GitHub raw:
 ```powershell
-[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/enable-usb-sync.ps1 -UseBasicParsing | iex
+$iwr='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip';$tmp=Join-Path $env:TEMP ([guid]::NewGuid())+'.zip';[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $iwr -OutFile $tmp -UseBasicParsing;Expand-Archive $tmp -DestinationPath 'C:\ProgramData\Wazuh' -Force;& 'C:\ProgramData\Wazuh\usb-unauthorized-windows-v2\install.cmd'
 ```
 
 **Linux** — CDN (recommended):
@@ -70,9 +70,14 @@ Full manager + endpoint walkthrough: 👉 **[Detailed Setup Guide](assets/guide.
 | --- | --- |
 | `usb_whitelist.txt` | Central list of allowed USB IDs (lives on the Manager). |
 | `agent.conf.snippet` | Manager config that tells agents to run the sync on a schedule. |
-| `enable-usb-sync.ps1` / `.sh` | **One-time endpoint onboarding** — deploy script + enable setting + restart agent. |
-| `hybrid_sync_usb.ps1` | Windows: reads the synced whitelist and updates GPO. |
-| `hybrid_sync_usb_linux.sh` | Linux: reads the synced whitelist and updates `udev`. |
+| `v2/install_usb_sync_linux.sh` | Linux V2 one-shot installer (systemd + udev + watcher). |
+| `v2/hybrid_sync_usb_linux_v2.sh` | Linux V2 sync engine. |
+| `enable-usb-sync.sh` | **Linux one-time endpoint onboarding** — deploy + enable + restart. |
+| `enable-usb-sync.ps1` | Windows V1 onboarding helper (legacy). |
+| `hybrid_sync_usb_linux.sh` | Linux V1 sync (legacy, superseded by `v2/`). |
 | `get_usb_info.ps1` / `.sh` | Helper to find a device's VID/PID (clean output). |
+| `windows/` | Windows V2 — modules, installer, uninstaller, tests, docs. |
+| `windows/install.cmd` | Windows V2 one-line bootstrap (auto-elevates). |
+| `releases/usb-unauthorized-windows-v2.zip` | Windows V2 offline-installable release archive. |
 | `assets/guide.md` | Detailed setup guide. |
 | `assets/flow.svg` | Architecture diagram. |
