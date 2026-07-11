@@ -3,13 +3,15 @@
 
 Set-StrictMode -Version Latest
 
-$UsbSync = @{
+# NOTE: must be $global so module-scope functions (Registry.psm1, Policy.psm1)
+# can read it. A plain script-scope $UsbSync is invisible inside imported modules.
+$global:UsbSync = @{
     Version            = '2.0.0'
     ComponentName      = 'WazuhHybridUsbSync'
 
     # Wazuh agent layout
     AgentRootX86       = Join-Path ${env:ProgramFiles(x86)} 'ossec-agent'
-    AgentRoot          = Join-Path $env:ProgramData     'ossec-agent'
+    AgentRoot          = Join-Path ${env:ProgramFiles}   'ossec-agent'
     SharedDir          = 'shared'
     WhitelistFile      = 'usb_whitelist.txt'
 

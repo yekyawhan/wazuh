@@ -5,20 +5,6 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Get-PolicyRoot {
-    [CmdletBinding()]
-    [OutputType([string])]
-    param()
-    return $UsbSync.PolicyRoot
-}
-
-function Get-AllowDeviceIdsPath {
-    [CmdletBinding()]
-    [OutputType([string])]
-    param()
-    return $UsbSync.AllowDeviceIdsRoot
-}
-
 function Backup-PolicyState {
     [CmdletBinding()]
     param()
@@ -92,8 +78,6 @@ function Test-PolicyState {
 }
 
 Export-ModuleMember -Function @(
-    'Get-PolicyRoot',
-    'Get-AllowDeviceIdsPath',
     'Backup-PolicyState',
     'Restore-PolicyState',
     'Test-PolicyState'

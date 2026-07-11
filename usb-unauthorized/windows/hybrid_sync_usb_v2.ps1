@@ -36,8 +36,8 @@ function Invoke-HybridUsbSync {
         Write-LogInfo "Parsed $($entries.Count) unique device(s)."
 
         if ($entries.Count -eq 0) {
-            Write-LogWarning "Whitelist is empty. Removing allow-list policy (default-deny)."
-            Remove-UsbAllowList
+            Write-LogWarning "Whitelist is empty. Blocking ALL USB devices (Deny-mode: enabled + empty list)."
+            Set-UsbAllowList -DeviceIds @()
         } else {
             Set-UsbAllowList -DeviceIds $entries.DeviceId
         }

@@ -46,22 +46,8 @@ function Test-PathWritable {
     } catch { return $false }
 }
 
-function Backup-RegistryValue {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][string]$Name
-    )
-    if (Test-Path -LiteralPath $Path) {
-        $item = Get-ItemProperty -LiteralPath $Path -ErrorAction Stop
-        if ($null -ne $item.$Name) { return $item.$Name }
-    }
-    return $null
-}
-
 Export-ModuleMember -Function @(
     'Test-IsAdministrator',
     'Invoke-WithRetry',
-    'Test-PathWritable',
-    'Backup-RegistryValue'
+    'Test-PathWritable'
 )

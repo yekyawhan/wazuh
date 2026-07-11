@@ -72,17 +72,26 @@ Describe 'Read-UsbWhitelist' {
 }
 
 Describe 'Merge-Whitelist' {
-    It 'dedupes across formats' {
+    It 'dedupes across formats (Linux + Windows form = 1 device)' {
         $tmp = Join-Path $env:TEMP ([guid]::NewGuid()) + '.txt'
         try {
             Set-Content -LiteralPath $tmp -Value @(
                 'USB\VID_0951&PID_1666'
                 '0951:1666'
-                'vid_0951&pid_1666'  # case-only dup after normalize
             ) -Encoding UTF8
             $m = Merge-Whitelist -Path $tmp
-            # Linux form converts to same Windows id; case-different windows forms also same
-            $m.Count | Should -BeLessOrEqual 2
+            $m.Count | Should -Be 1
+            $m[0].DeviceId | Should -Be 'USB\VID_0951&PID_1666'
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+    It 'treats lowercase windows form as invalid (format mismatch)' {
+        $tmp = Join-Path $env:TEMP ([guid]::NewGuid()) + '.txt'
+        try {
+            Set-Content -LiteralPath $tmp -Value @('vid_0951&pid_1666') -Encoding UTF8
+            $m = Merge-Whitelist -Path $tmp
+            $m.Count | Should -Be 0
         } finally {
             Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
         }
