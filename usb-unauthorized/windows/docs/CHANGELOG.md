@@ -4,6 +4,14 @@
 
 Initial Windows V2 release. Fresh build, no V1 carry-over.
 
+Fixes post-first-cut (commit 7e7b9df):
+- `$global:UsbSync` so module-scope functions can read configuration (was invisible → sync threw under StrictMode).
+- Empty whitelist now **blocks all USB** (AllowDeviceIDsEnabled=1 + empty list), not allow-all.
+
+Additions (commit df63571):
+- Log rotation (5MB / 3 backups) in Logger.
+- Comment-based help on every exported function.
+
 ### Added
 - Manager-pushed whitelist via `<shared>` agent.conf block.
 - Allow-list Device Installation Restrictions policy.

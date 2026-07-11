@@ -131,4 +131,4 @@ Every failure path: **Retry → Recover → Rollback → Log AUDIT**.
 | Sprint 5 — Installer | ✅ Done |
 | Sprint 6 — Uninstaller | ✅ Done |
 | Sprint 7 — Tests | ✅ Done |
-| Sprint 8 — Docs & Release | 🔄 Docs done, ZIP pending |
+| Sprint 8 — Docs & Release | ✅ Done, tagged v2.0.0 |
