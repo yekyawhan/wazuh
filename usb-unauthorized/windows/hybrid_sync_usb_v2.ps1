@@ -109,6 +109,9 @@ function Start-HybridUsbWatcher {
 # would throw and break both -File execution and dot-sourcing from the installer.
 if ($MyInvocation.InvocationName -ne '.') {
     try {
+        # --watch is deprecated for task-scheduler use (long-lived processes
+        # under SYSTEM exit non-zero after the task window ends). The dedicated
+        # Start-UsbWatcher.ps1 is the long-lived watcher entry-point.
         if ($args -contains '--watch') {
             Start-HybridUsbWatcher
             exit 0

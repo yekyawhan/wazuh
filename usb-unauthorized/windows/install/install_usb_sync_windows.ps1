@@ -48,12 +48,19 @@ function Install-UsbSync {
         #    Resolve to absolute path: SYSTEM account has no current directory
         #    if the working dir is a per-user path, and a relative path here
         #    would be resolved against that — causing exit 267011.
+        #    No --watch: the long-lived FileSystemWatcher does not survive the
+        #    task scheduler lifecycle cleanly. Periodic re-sync (every 5 min)
+        #    plus the on-demand re-run via Wazuh agent.conf (or the watcher
+        #    script launched manually) covers the same use case.
         $taskCwd = (Resolve-Path -LiteralPath $AppRoot).ProviderPath
         $action = New-ScheduledTaskAction `
             -Execute 'powershell.exe' `
-            -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$taskCwd\hybrid_sync_usb_v2.ps1`" --watch" `
+            -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$taskCwd\hybrid_sync_usb_v2.ps1`"" `
             -WorkingDirectory $taskCwd
-        $triggerBoot = New-ScheduledTaskTrigger -AtStartup
+        $triggerBoot   = New-ScheduledTaskTrigger -AtStartup
+        $triggerRepeat = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+                         -RepetitionInterval (New-TimeSpan -Minutes 5) `
+                         -RepetitionDuration ([TimeSpan]::MaxValue)
         $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
         $settings = New-ScheduledTaskSettingsSet `
             -AllowStartIfOnBatteries `
@@ -61,9 +68,9 @@ function Install-UsbSync {
             -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
             -StartWhenAvailable
         Register-ScheduledTask -TaskName $UsbSync.TaskName `
-            -Action $action -Trigger $triggerBoot -Principal $principal -Settings $settings `
+            -Action $action -Trigger $triggerBoot,$triggerRepeat -Principal $principal -Settings $settings `
             -Description $UsbSync.TaskDescription -Force | Out-Null
-        Write-LogInfo "Scheduled task registered: $($UsbSync.TaskName)"
+        Write-LogInfo "Scheduled task registered: $($UsbSync.TaskName) (AtStartup + every 5 min)"
 
         # 3. First sync (run inline, in-process, so the log is created now)
         Write-LogInfo 'Running first synchronization...'
