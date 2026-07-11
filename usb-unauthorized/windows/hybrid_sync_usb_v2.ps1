@@ -44,7 +44,7 @@ function Invoke-HybridUsbSync {
     Write-LogInfo "Sync started. Whitelist: $whitelistPath"
 
     try {
-        $entries = Merge-Whitelist -Path $whitelistPath
+        $entries = @(Merge-Whitelist -Path $whitelistPath)
         Write-LogInfo "Parsed $($entries.Count) unique device(s)."
 
         if ($entries.Count -eq 0) {
