@@ -104,17 +104,27 @@ function Start-HybridUsbWatcher {
     }
 }
 
-# Run when invoked directly (not when dot-sourced)
+# Run when invoked directly (not when dot-sourced).
+# NOTE: no Export-ModuleMember here — this is a .ps1, not a module. Calling it
+# would throw and break both -File execution and dot-sourcing from the installer.
 if ($MyInvocation.InvocationName -ne '.') {
-    if ($args -contains '--watch') {
-        Start-HybridUsbWatcher
-    } else {
-        $ok = Invoke-HybridUsbSync
-        exit $(if ($ok) { 0 } else { 1 })
+    try {
+        if ($args -contains '--watch') {
+            Start-HybridUsbWatcher
+            exit 0
+        } else {
+            $ok = Invoke-HybridUsbSync
+            exit $(if ($ok) { 0 } else { 1 })
+        }
+    } catch {
+        # Last-resort logging so a scheduled-task failure is never invisible.
+        try {
+            $bootLog = Join-Path $env:ProgramData 'Wazuh\Logs\UsbSync\bootstrap-error.log'
+            $dir = Split-Path $bootLog -Parent
+            if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+            $stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss.fff')
+            Add-Content -LiteralPath $bootLog -Value "$stamp FATAL $($_.Exception.Message)`n$($_.ScriptStackTrace)" -Encoding UTF8
+        } catch { }
+        exit 1
     }
 }
-
-Export-ModuleMember -Function @(
-    'Invoke-HybridUsbSync',
-    'Start-HybridUsbWatcher'
-)

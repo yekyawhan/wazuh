@@ -75,5 +75,3 @@ if ($MyInvocation.InvocationName -ne '.') {
     $purge = $args -contains '--purge-logs'
     exit (Uninstall-UsbSync -PurgeLogs:$purge)
 }
-
-Export-ModuleMember -Function 'Uninstall-UsbSync'

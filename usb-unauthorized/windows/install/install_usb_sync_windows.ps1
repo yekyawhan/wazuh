@@ -87,5 +87,3 @@ function Install-UsbSync {
 if ($MyInvocation.InvocationName -ne '.') {
     exit (Install-UsbSync)
 }
-
-Export-ModuleMember -Function 'Install-UsbSync'
