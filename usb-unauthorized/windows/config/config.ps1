@@ -28,6 +28,9 @@ $global:UsbSync = @{
     AllowDeviceIdsRoot    = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions'
     AllowDeviceIdsEnabled = 'AllowDeviceIDsEnabled'
     AllowDeviceIds        = 'AllowDeviceIDs'
+    # Required so devices NOT in the allow list are actually blocked.
+    # Without this, AllowDeviceIDs only *permits* listed devices; others still install.
+    DenyUnspecified       = 'DenyUnspecified'
     BackupSubKey          = 'V2Backup'
 
     # Scheduled task

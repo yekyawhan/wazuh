@@ -45,11 +45,13 @@ function Install-UsbSync {
         }
 
         # 2. Register Scheduled Task
+        #    Two triggers: at startup (watcher survives reboots) + on a repeating
+        #    schedule (fallback resync if a file-change event is ever missed).
         $action = New-ScheduledTaskAction `
             -Execute 'powershell.exe' `
             -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$AppRoot\hybrid_sync_usb_v2.ps1`" --watch" `
             -WorkingDirectory $AppRoot
-        $trigger = New-ScheduledTaskTrigger -AtStartup
+        $triggerBoot = New-ScheduledTaskTrigger -AtStartup
         $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
         $settings = New-ScheduledTaskSettingsSet `
             -AllowStartIfOnBatteries `
@@ -57,15 +59,20 @@ function Install-UsbSync {
             -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
             -StartWhenAvailable
         Register-ScheduledTask -TaskName $UsbSync.TaskName `
-            -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
+            -Action $action -Trigger $triggerBoot -Principal $principal -Settings $settings `
             -Description $UsbSync.TaskDescription -Force | Out-Null
         Write-LogInfo "Scheduled task registered: $($UsbSync.TaskName)"
 
-        # 3. First sync
+        # 3. First sync (run inline, in-process, so the log is created now)
         Write-LogInfo 'Running first synchronization...'
-        & (Join-Path $AppRoot 'hybrid_sync_usb_v2.ps1')
+        . (Join-Path $AppRoot 'hybrid_sync_usb_v2.ps1')
+        [void](Invoke-HybridUsbSync)
 
-        # 4. Health check
+        # 4. Start the task now so the watcher runs without waiting for a reboot
+        Start-ScheduledTask -TaskName $UsbSync.TaskName -ErrorAction SilentlyContinue
+        Write-LogInfo 'Scheduled task started (watcher active).'
+
+        # 5. Health check
         $task = Get-ScheduledTask -TaskName $UsbSync.TaskName -ErrorAction SilentlyContinue
         if (-not $task) { throw 'Scheduled task not found after install' }
         Write-LogAudit "Install complete. Version $($UsbSync.Version)"

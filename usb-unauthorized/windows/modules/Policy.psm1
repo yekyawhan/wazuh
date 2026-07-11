@@ -38,6 +38,8 @@ function Set-UsbAllowList {
     # 3. Write
     try {
         Set-ItemProperty -LiteralPath $root -Name $UsbSync.AllowDeviceIdsEnabled -Value 1 -Type DWord
+        # Block everything not explicitly allowed (else the allow-list is toothless).
+        Set-ItemProperty -LiteralPath $root -Name $UsbSync.DenyUnspecified -Value 1 -Type DWord
         if ($DeviceIds.Count -gt 0) {
             Set-ItemProperty -LiteralPath $root -Name $UsbSync.AllowDeviceIds -Value $DeviceIds -Type MultiString
         } else {
@@ -77,6 +79,7 @@ function Remove-UsbAllowList {
         if (Test-Path -LiteralPath $root) {
             Remove-ItemProperty -LiteralPath $root -Name $UsbSync.AllowDeviceIdsEnabled -ErrorAction SilentlyContinue
             Remove-ItemProperty -LiteralPath $root -Name $UsbSync.AllowDeviceIds        -ErrorAction SilentlyContinue
+            Remove-ItemProperty -LiteralPath $root -Name $UsbSync.DenyUnspecified       -ErrorAction SilentlyContinue
         }
         Write-LogAudit "Allow-list removed (uninstall)."
     } catch {
