@@ -124,11 +124,11 @@ Every failure path: **Retry → Recover → Rollback → Log AUDIT**.
 
 | Sprint | Status |
 |--------|--------|
-| Sprint 1 — Foundation | 🔄 In progress |
-| Sprint 2 — Registry | ⏳ Pending |
-| Sprint 3 — Policy | ⏳ Pending |
-| Sprint 4 — Watcher | ⏳ Pending |
-| Sprint 5 — Installer | ⏳ Pending |
-| Sprint 6 — Uninstaller | ⏳ Pending |
-| Sprint 7 — Tests | ⏳ Pending |
-| Sprint 8 — Release | ⏳ Pending |
+| Sprint 1 — Foundation | ✅ Done |
+| Sprint 2 — Registry | ✅ Done |
+| Sprint 3 — Policy | ✅ Done |
+| Sprint 4 — Watcher | ✅ Done |
+| Sprint 5 — Installer | ✅ Done |
+| Sprint 6 — Uninstaller | ✅ Done |
+| Sprint 7 — Tests | ✅ Done |
+| Sprint 8 — Docs & Release | 🔄 Docs done, ZIP pending |
