@@ -1,0 +1,64 @@
+# uninstall_usb_sync_windows.ps1 — Uninstaller
+# Idempotent. Unregisters task, restores default device install policy.
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$AppRoot    = Split-Path -Parent $ScriptRoot
+. (Join-Path $AppRoot 'config\config.ps1')
+
+Import-Module (Join-Path $AppRoot 'modules\Logger.psm1')   -Force
+Import-Module (Join-Path $AppRoot 'modules\Utils.psm1')    -Force
+Import-Module (Join-Path $AppRoot 'modules\Policy.psm1')   -Force
+
+function Uninstall-UsbSync {
+    [CmdletBinding()]
+    param(
+        [switch]$PurgeLogs
+    )
+
+    Initialize-Logger -LogDir $UsbSync.LogDir -LogFileName $UsbSync.InstallLogFile `
+        -EventSource $UsbSync.EventLogSource -EventLogName $UsbSync.EventLogName
+
+    if (-not (Test-IsAdministrator)) {
+        Write-LogError 'Uninstaller requires Administrator.'
+        return 1
+    }
+
+    try {
+        # 1. Stop + unregister task
+        $task = Get-ScheduledTask -TaskName $UsbSync.TaskName -ErrorAction SilentlyContinue
+        if ($task) {
+            Stop-ScheduledTask -TaskName $UsbSync.TaskName -ErrorAction SilentlyContinue
+            Unregister-ScheduledTask -TaskName $UsbSync.TaskName -Confirm:$false
+            Write-LogInfo "Task unregistered: $($UsbSync.TaskName)"
+        } else {
+            Write-LogInfo "Task not present (already uninstalled). Skipping."
+        }
+
+        # 2. Restore default policy
+        try { Remove-UsbAllowList }
+        catch { Write-LogWarning "Policy remove failed: $($_.Exception.Message)" }
+
+        # 3. Optional log purge
+        if ($PurgeLogs -and (Test-Path -LiteralPath $UsbSync.LogDir)) {
+            Remove-Item -LiteralPath (Join-Path $UsbSync.LogDir '*') -Recurse -Force -ErrorAction SilentlyContinue
+            Write-LogInfo 'Logs purged.'
+        }
+
+        Write-LogAudit "Uninstall complete. Version $($UsbSync.Version)"
+        Write-Host "[OK] Wazuh Hybrid USB Sync uninstalled."
+        return 0
+    } catch {
+        Write-LogError "Uninstall failed: $($_.Exception.Message)"
+        return 2
+    }
+}
+
+if ($MyInvocation.InvocationName -ne '.') {
+    $purge = $args -contains '--purge-logs'
+    exit (Uninstall-UsbSync -PurgeLogs:$purge)
+}
+
+Export-ModuleMember -Function 'Uninstall-UsbSync'
