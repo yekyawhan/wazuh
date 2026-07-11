@@ -136,11 +136,11 @@ Get-WinEvent -LogName Application -Source WazuhUsbSync -MaxEvents 50
 
 ## Testing
 
-Requires Pester (`Install-Module Pester -Force`).
+Requires Pester (`Install-Module Pester -Force`). Full step-by-step: 👉 **[TESTING.md](docs/TESTING.md)** (includes manual end-to-end smoke test).
 
 ```powershell
 Invoke-Pester -Path tests\Parser.Tests.ps1
-Invoke-Pester -Path tests\Registry.Tests.ps1     # requires Administrator
+Invoke-Pester -Path tests\Registry.Tests.ps1     # requires Administrator (writes HKLM)
 ```
 
 ---
