@@ -77,23 +77,30 @@ function Install-UsbSync {
         . (Join-Path $AppRoot 'hybrid_sync_usb_v2.ps1')
         [void](Invoke-HybridUsbSync)
 
-        # 3b. Force re-evaluation of pre-existing USB devices
-        #     Devices plugged in before policy was set remain allowed by Windows.
-        #     Disable/enable cycle forces PnP to re-check them against the new policy.
-        Write-LogInfo 'Re-scanning connected USB devices to enforce policy on pre-existing devices...'
+        # 3b. Force re-evaluation of pre-existing USB storage devices.
+        #     Devices plugged in before policy was set are not re-evaluated by Windows.
+        #     Disable/enable cycle on ONLY actual storage devices (not root hubs or
+        #     controllers — disabling those kills all USB) forces PnP to re-check
+        #     them against the newly applied policy.
+        Write-LogInfo 'Re-scanning connected USB storage devices to enforce policy on pre-existing devices...'
         try {
-            $usbDevices = Get-PnpDevice -Class USB -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'OK' }
+            $usbDevices = Get-PnpDevice -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $_.InstanceId -match '^USB\\VID_' -and
+                    $_.Status -eq 'OK' -and
+                    $_.Class -notin @('USB', 'System', 'HIDClass')
+                }
             $count = 0
             foreach ($dev in $usbDevices) {
                 try {
                     Disable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction SilentlyContinue
-                    Enable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction SilentlyContinue
+                    Enable-PnpDevice  -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction SilentlyContinue
                     $count++
                 } catch {
                     Write-LogDebug "Could not re-scan device $($dev.InstanceId): $($_.Exception.Message)"
                 }
             }
-            Write-LogInfo "Re-scanned $count USB device(s). Non-whitelisted devices are now blocked."
+            Write-LogInfo "Re-scanned $count USB storage device(s). Policy now enforced on pre-existing devices."
         } catch {
             Write-LogWarning "USB device re-scan failed: $($_.Exception.Message). Pre-existing devices may remain allowed until unplugged."
         }

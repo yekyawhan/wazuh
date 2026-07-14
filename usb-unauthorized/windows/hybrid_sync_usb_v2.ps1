@@ -57,39 +57,47 @@ function Invoke-HybridUsbSync {
         # Refresh device install policy so new allow-list takes effect immediately
         Invoke-GpUpdate
 
-        # Enforce policy on pre-existing devices (Option 3: boot-time check)
-        # Devices plugged in before policy was set remain allowed by Windows.
-        # This scan runs on every boot and every 5-min sync to catch pre-existing devices.
+        # Force device re-evaluation so policy applies to already-connected devices.
+        # Only re-scan actual USB storage/mass-storage devices (not root hubs,
+        # controllers, or composite devices — disabling those kills ALL USB).
         try {
-            $connectedDevices = Get-PnpDevice -Class USB -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'OK' }
-            $whitelistedIds = @($entries.DeviceId) + @($UsbSync.StorageLayerIds)
-            $blocked = 0
-            foreach ($dev in $connectedDevices) {
-                # Extract device ID from InstanceId (format: USB\VID_XXXX&PID_YYYY\serial)
-                # We match against VID_XXXX&PID_YYYY or the first two parts
-                $devId = $dev.InstanceId -replace '^([^\\]+\\[^\\]+).*', '$1'
-                $allowed = $false
-                foreach ($wl in $whitelistedIds) {
-                    if ($devId -like "*$wl*" -or $wl -like "*$devId*") {
-                        $allowed = $true
+            $usbStorage = Get-PnpDevice -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $_.InstanceId -match '^USB\\VID_' -and
+                    $_.Status -eq 'OK' -and
+                    $_.Class -notin @('USB', 'System', 'HIDClass')
+                }
+            foreach ($dev in $usbStorage) {
+                $devVidPid = $dev.InstanceId -replace '^(USB\\VID_[0-9A-Fa-f]{4}&PID_[0-9A-Fa-f]{4}).*', '$1'
+                $isWhitelisted = $false
+                foreach ($wl in @($entries.DeviceId)) {
+                    if ($devVidPid -eq $wl) { $isWhitelisted = $true; break }
+                }
+                if (-not $isWhitelisted) {
+                    # Disable non-whitelisted device; policy prevents re-enable
+                    Disable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction SilentlyContinue
+                    Write-LogWarning "Blocked pre-existing device: $($dev.FriendlyName) [$devVidPid]"
+                }
+            }
+            # Re-enable any whitelisted device that was previously disabled
+            $disabledUsb = Get-PnpDevice -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $_.InstanceId -match '^USB\\VID_' -and
+                    $_.Status -eq 'Error' -and
+                    $_.Class -notin @('USB', 'System', 'HIDClass')
+                }
+            foreach ($dev in $disabledUsb) {
+                $devVidPid = $dev.InstanceId -replace '^(USB\\VID_[0-9A-Fa-f]{4}&PID_[0-9A-Fa-f]{4}).*', '$1'
+                foreach ($wl in @($entries.DeviceId)) {
+                    if ($devVidPid -eq $wl) {
+                        Enable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction SilentlyContinue
+                        Write-LogInfo "Re-enabled whitelisted device: $($dev.FriendlyName) [$devVidPid]"
                         break
                     }
                 }
-                if (-not $allowed) {
-                    Write-LogWarning "Non-whitelisted USB device detected: $($dev.FriendlyName) [$devId]. Disabling."
-                    try {
-                        Disable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction Stop
-                        $blocked++
-                    } catch {
-                        Write-LogError "Failed to disable $($dev.InstanceId): $($_.Exception.Message)"
-                    }
-                }
-            }
-            if ($blocked -gt 0) {
-                Write-LogAudit "Boot-time enforcement: disabled $blocked non-whitelisted device(s)."
             }
         } catch {
-            Write-LogWarning "Boot-time enforcement check failed: $($_.Exception.Message)"
+            Write-LogWarning "Device enforcement check failed: $($_.Exception.Message)"
         }
 
         Write-LogAudit "Sync completed. Devices: $($entries.Count)"
