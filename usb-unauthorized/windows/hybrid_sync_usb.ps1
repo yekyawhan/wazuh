@@ -148,6 +148,20 @@ if (-not $amInstalledCopy) {
     Copy-Item -Path $PSCommandPath -Destination $installPath -Force
     Write-Host "[3] installed engine -> $installPath"
 
+    # [3b] self-bootstrap Active Response: copy self to active-response\bin\ so
+    #      the Wazuh AR command defined in ossec.conf can call it. Idempotent.
+    $arBin = "C:\Program Files (x86)\ossec-agent\active-response\bin\hybrid_sync_usb.ps1"
+    if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath)) {
+        try {
+            $arDir = Split-Path -LiteralPath $arBin -Parent
+            if (-not (Test-Path -LiteralPath $arDir)) { New-Item -ItemType Directory -Path $arDir -Force | Out-Null }
+            Copy-Item -Path $PSCommandPath -Destination $arBin -Force
+            Write-Host "[3b] placed engine in AR bin -> $arBin"
+        } catch {
+            Write-Host "[3b] WARNING: could not place in AR bin: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+
     # [4] scheduled tasks (SYSTEM) -----------------------------------------
     # WHY Task Scheduler and not a Wazuh <wodle name="command">:
     #   * a wodle needs wazuh_command.remote_commands=1 set LOCALLY on every
