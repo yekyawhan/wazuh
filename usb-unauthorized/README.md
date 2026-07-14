@@ -24,7 +24,7 @@ Deploys the sync script, enables the required setting, restarts the agent, and r
 
 **Windows** — V3 (recommended, no zip — direct per-file download):
 ```powershell
-$base='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/windows';$d="$env:TEMP\usbsync-v3";New-Item -ItemType Directory -Path $d -Force | Out-Null;iwr "$base\install-usb-v3.ps1" -OutFile "$d\install-usb-v3.ps1" -UseBasicParsing;iwr "$base\hybrid_sync_usb.ps1" -OutFile "$d\hybrid_sync_usb.ps1" -UseBasicParsing;iwr "$base\get_usb_info.ps1" -OutFile "$d\get_usb_info.ps1" -UseBasicParsing;iwr "$base\uninstall-usb-control.ps1" -OutFile "$d\uninstall-usb-control.ps1" -UseBasicParsing;Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"$d\install-usb-v3.ps1"
+$base='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/windows';$d="$env:TEMP\usbsync-v3";New-Item -ItemType Directory -Path $d -Force | Out-Null;iwr "$base\hybrid_sync_usb.ps1" -OutFile "$d\hybrid_sync_usb.ps1" -UseBasicParsing;iwr "$base\uninstall-usb-control.ps1" -OutFile "$d\uninstall-usb-control.ps1" -UseBasicParsing;iwr "$base\get_usb_info.ps1" -OutFile "$d\get_usb_info.ps1" -UseBasicParsing;Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"$d\hybrid_sync_usb.ps1"
 ```
 
 Windows — CDN (jsdelivr, may serve stale for ~12h):
@@ -32,7 +32,7 @@ Windows — CDN (jsdelivr, may serve stale for ~12h):
 $base='https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/windows'
 ```
 
-(Use the same per-file download pattern; substitute the `$base` value.)
+(Use the same per-file download pattern; substitute the `$base` value.)`hybrid_sync_usb.ps1` is dual-mode — it installs itself on first run, then runs SYNC mode from the install path via the scheduled task it registers.
 
 **Linux** — CDN (recommended):
 ```bash
@@ -46,13 +46,6 @@ curl -fsSL https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauth
 ### 2. Find a device's ID (to add it to the whitelist)
 Prints a clean, de-duplicated list (hubs hidden).
 
-**Windows** — CDN / raw:
-```powershell
-[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/get_usb_info.ps1 -UseBasicParsing | iex
-```
-```powershell
-[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/get_usb_info.ps1 -UseBasicParsing | iex
-```
 **Linux** — CDN / raw:
 ```bash
 curl -sL https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/get_usb_info.sh | bash
@@ -78,9 +71,7 @@ Full manager + endpoint walkthrough: 👉 **[Detailed Setup Guide](assets/guide.
 | `enable-usb-sync.sh` | **Linux one-time endpoint onboarding** — deploy + enable + restart. |
 | `enable-usb-sync.ps1` | Windows V1 onboarding helper (legacy). |
 | `hybrid_sync_usb_linux.sh` | Linux V1 sync (legacy, superseded by `v2/`). |
-| `get_usb_info.ps1` / `.sh` | Helper to find a device's VID/PID (clean output). |
-| `windows/install-usb-v3.ps1` | Windows V3 per-agent installer (run once, elevated). |
-| `windows/hybrid_sync_usb.ps1` | Windows V3 sync engine — storage-only USB control via Device Installation Restrictions + devnode purge. |
+| `windows/hybrid_sync_usb.ps1` | Windows V3 — one file, dual-mode: self-installing on first run + storage-only sync engine (Device Installation Restrictions + devnode purge). |
 | `windows/uninstall-usb-control.ps1` | Windows V3 full agent cleanup (policy + script + tasks). |
 | `windows/get_usb_info.ps1` | List USB devices (raw/whitelist ID/InstanceID) for adding to the whitelist. |
 | `assets/guide.md` | Detailed setup guide. |

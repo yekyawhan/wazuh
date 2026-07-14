@@ -1,9 +1,24 @@
-# hybrid_sync_usb.ps1  (v3 - STORAGE-ONLY USB device control)
+# hybrid_sync_usb.ps1  (v3 - STORAGE-ONLY USB device control, self-installing)
 #
-# Reads usb_whitelist.txt from the Wazuh shared folder and enforces it with the
-# Windows Device Installation Restrictions policy - scoped to USB MASS STORAGE
-# devices ONLY. Keyboards, mice, cameras, Bluetooth, hubs, printers, phones are
-# NEVER touched by this policy in any way (no DenyUnspecified, no class lists).
+# ONE file does everything. Run it once, elevated, from anywhere:
+#
+#     powershell -ExecutionPolicy Bypass -File .\hybrid_sync_usb.ps1
+#
+# It detects where it is running from and picks a mode automatically:
+#   INSTALL MODE - when run from anywhere EXCEPT its install path. Removes any
+#                  old v1/v2 install, repairs devices v2 wrongly disabled,
+#                  copies itself to C:\ProgramData\WazuhUsbSync, registers the
+#                  two scheduled tasks, runs the first sync, prints verification.
+#   SYNC MODE    - when run FROM the install path (i.e. by the scheduled tasks,
+#                  as SYSTEM). Applies the whitelist. No install side effects.
+# So the same file is both the installer and the engine, and pushing it to the
+# Wazuh manager's shared folder updates the engine fleet-wide (see CENTRAL
+# UPDATE below). Re-running it is safe and idempotent.
+#
+# WHAT IT ENFORCES: the Windows Device Installation Restrictions policy, scoped
+# to USB MASS STORAGE ONLY. Keyboards, mice, cameras, Bluetooth, hubs, printers
+# and phones are NEVER touched by this policy in any way (no DenyUnspecified,
+# no class lists) - they are structurally outside it.
 #
 # DESIGN (v3 - replaces the old DenyUnspecified block-all design):
 #   DENY  : DenyDeviceIDs = "USB\Class_08" (the USB mass-storage interface
@@ -15,6 +30,9 @@
 #           Instance-ID allows ABOVE Device-ID denies, so the whitelist wins.
 #           (A plain AllowDeviceIDs VID&PID allow can NOT win here: allow and
 #           deny at the same Device-ID layer -> deny takes precedence.)
+#           Verified live: whitelisted stick mounts as a drive letter, and NO
+#           storage-layer IDs are needed - once the deny is scoped to Class_08,
+#           the USBSTOR disk / STORAGE volume children aren't denied by anything.
 #   PURGE : every sync also deletes the cached devnodes of NON-whitelisted USB
 #           storage (present AND absent). Windows only re-checks this policy at
 #           INSTALL time, so a stick that was ever used before keeps its old
@@ -33,34 +51,169 @@
 # whitelisted drive keeps working even while unplugged and across port moves.
 #
 # CENTRAL UPDATE: if the manager pushes a newer copy of this script to the
-# shared folder, this run copies it over the local one; the new version runs
-# from the next trigger. No GitHub, no reinstall.
+# shared folder, a sync-mode run copies it over the installed one; the new
+# version runs from the next trigger. No GitHub, no reinstall.
 
 $whitelistFile = "C:\Program Files (x86)\ossec-agent\shared\usb_whitelist.txt"
 $logFile       = "C:\Program Files (x86)\ossec-agent\active-response\active-responses.log"
 $workDir       = "C:\ProgramData\WazuhUsbSync"
-$appLogFile    = "$workDir\log.txt"
 $cacheFile     = "$workDir\instance_cache.txt"
 $stateFile     = "$workDir\applied_state.txt"
+$localLog      = "$workDir\usb-sync.log"
+$installPath   = "$workDir\hybrid_sync_usb.ps1"
 $sharedSelf    = "C:\Program Files (x86)\ossec-agent\shared\hybrid_sync_usb.ps1"
+$taskSync      = "Wazuh USB Sync v3"
+$taskPlug      = "Wazuh USB Sync v3 OnPlug"
 
+# LOGGING GOTCHA (confirmed live: v3 ran at 14:29/14:31/15:02 and wrote ZERO
+# lines - active-responses.log's LastWriteTime stayed at 13:13). The Wazuh agent
+# holds that file open, and the old retry loop swallowed the failure silently,
+# so every run looked successful while the entire audit trail was lost.
+# Measured, NOT assumed: if the holder denies write-sharing, FileShare.ReadWrite
+# on OUR side does not rescue the append either - it fails exactly like
+# Add-Content. So the agent log can only ever be BEST-EFFORT here.
+# The real fix is the workdir log below: nothing else holds it, so it always
+# succeeds. Ship USB events to the manager by pointing a <localfile> at it
+# (see agent.conf) rather than relying on active-responses.log.
 function Write-Log($message) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $logMessage = "$timestamp - hybrid_sync_usb - $message"
     Write-Host $logMessage
-    # Write to app-specific log (always accessible)
-    $retryCount = 0
-    while ($retryCount -lt 3) {
-        try {
-            Add-Content -Path $appLogFile -Value $logMessage -Encoding utf8 -ErrorAction Stop
-            break
-        }
-        catch { $retryCount++; Start-Sleep -Seconds 1 }
-    }
-    # Fallback to Wazuh active-responses log (may fail under SYSTEM)
-    try { Add-Content -Path $logFile -Value $logMessage -ErrorAction SilentlyContinue }
-    catch { }
+
+    # own log first - must never fail
+    try {
+        if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path $workDir -Force | Out-Null }
+        $fs = New-Object System.IO.FileStream($localLog, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)
+        $sw = New-Object System.IO.StreamWriter($fs)
+        $sw.WriteLine($logMessage); $sw.Flush(); $sw.Close(); $fs.Close()
+    } catch { }
+
+    # Wazuh AR log (best-effort only - see note above)
+    try {
+        $fs = New-Object System.IO.FileStream($logFile, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)
+        $sw = New-Object System.IO.StreamWriter($fs)
+        $sw.WriteLine($logMessage); $sw.Flush(); $sw.Close(); $fs.Close()
+    } catch { }
 }
+
+function Test-IsAdmin {
+    ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+# ============================================================================
+# MODE DETECTION - installed copy runs the engine, any other copy installs it
+# ============================================================================
+$amInstalledCopy = $PSCommandPath -and ($PSCommandPath -ieq $installPath)
+
+if (-not $amInstalledCopy) {
+
+    # ======================= INSTALL MODE ===================================
+    Write-Host "=== USB storage-only control v3 - install ===" -ForegroundColor Cyan
+    if (-not (Test-IsAdmin)) {
+        Write-Host "ERROR: must run as Administrator (right-click PowerShell -> Run as administrator)." -ForegroundColor Red
+        exit 1
+    }
+
+    # [1] remove old v1/v2 leftovers ---------------------------------------
+    foreach ($tn in @('Wazuh Hybrid USB Sync', $taskSync, $taskPlug)) {
+        if (Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue) {
+            Unregister-ScheduledTask -TaskName $tn -Confirm:$false -ErrorAction SilentlyContinue
+            Write-Host "[1] removed scheduled task '$tn'"
+        }
+    }
+    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'Start-UsbWatcher|hybrid_sync_usb_v2' } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Host "[1] killed v2 watcher process $($_.ProcessId)" }
+    # be surgical: only delete C:\ProgramData\Wazuh if it really is the v2 layout
+    if (Test-Path "C:\ProgramData\Wazuh\hybrid_sync_usb_v2.ps1") {
+        Remove-Item "C:\ProgramData\Wazuh" -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "[1] removed v2 package install C:\ProgramData\Wazuh"
+    }
+
+    # [2] repair NON-storage devices v2 wrongly disabled (Code 22) ----------
+    Get-CimInstance Win32_PnPEntity -Filter "ConfigManagerErrorCode = 22" -ErrorAction SilentlyContinue |
+        Where-Object { $_.PNPDeviceID -like 'USB\VID_*' } |
+        ForEach-Object {
+            $isStorage = ($_.Service -eq 'USBSTOR')
+            foreach ($c in @($_.CompatibleID)) { if ($c -and $c -match '^USB\\Class_08') { $isStorage = $true } }
+            if (-not $isStorage) {
+                Enable-PnpDevice -InstanceId $_.PNPDeviceID -Confirm:$false -ErrorAction SilentlyContinue
+                Write-Host "[2] re-enabled wrongly-disabled device: $($_.Name)" -ForegroundColor Green
+            }
+        }
+
+    # [3] install self ------------------------------------------------------
+    if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path $workDir -Force | Out-Null }
+    Copy-Item -Path $PSCommandPath -Destination $installPath -Force
+    Write-Host "[3] installed engine -> $installPath"
+
+    # [4] scheduled tasks (SYSTEM) -----------------------------------------
+    # WHY Task Scheduler and not a Wazuh <wodle name="command">:
+    #   * a wodle needs wazuh_command.remote_commands=1 set LOCALLY on every
+    #     agent (Wazuh refuses to let a manager enable remote execution), which
+    #     defeats the point of a centrally-managed rollout;
+    #   * a wodle can only POLL on a fixed interval, so it could never react to
+    #     a device being plugged in. The ONEVENT task below can.
+    $runArgs   = "-NoProfile -ExecutionPolicy Bypass -File `"$installPath`""
+    $action    = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $runArgs
+    $trgBoot   = New-ScheduledTaskTrigger -AtStartup
+    $trgRepeat = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) `
+                 -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+                 -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+    Register-ScheduledTask -TaskName $taskSync -Action $action -Trigger $trgBoot, $trgRepeat `
+        -Principal $principal -Settings $settings -Force | Out-Null
+    Write-Host "[4] registered '$taskSync' (at startup + every 5 min)"
+
+    # on-plug trigger: Kernel-PnP configuration events = device arrival/install.
+    # schtasks (not Register-ScheduledTask) because only it exposes ONEVENT simply.
+    $xpath = "*[System[Provider[@Name='Microsoft-Windows-Kernel-PnP'] and (EventID=400 or EventID=410 or EventID=411 or EventID=430)]]"
+    & schtasks.exe /Create /F /TN "$taskPlug" /RU "SYSTEM" /RL HIGHEST /SC ONEVENT `
+        /EC "Microsoft-Windows-Kernel-PnP/Configuration" /MO $xpath `
+        /TR "powershell.exe $runArgs" | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[4] registered '$taskPlug' (device-plug event -> instant sync)"
+    } else {
+        Write-Host "[4] WARNING: on-plug task failed to register (5-min sync still active)" -ForegroundColor Yellow
+    }
+
+    # [5] first sync (runs the INSTALLED copy -> sync mode) ------------------
+    Write-Host "[5] running first sync..." -ForegroundColor Cyan
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installPath
+
+    # [6] verification ------------------------------------------------------
+    Write-Host ""
+    Write-Host "=== verification ===" -ForegroundColor Cyan
+    $reg = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions"
+    Write-Host "--- policy root (expect AllowDenyLayered/DenyDeviceIDs/DenyDeviceIDsRetroactive/AllowInstanceIDs = 1, DenyUnspecified EMPTY) ---"
+    Get-ItemProperty $reg -ErrorAction SilentlyContinue |
+        Select-Object AllowDenyLayered, DenyDeviceIDs, DenyDeviceIDsRetroactive, AllowInstanceIDs, DenyUnspecified | Format-List
+    Write-Host "--- deny list (expect only USB\Class_08) ---"
+    (Get-Item "$reg\DenyDeviceIDs" -ErrorAction SilentlyContinue).Property | ForEach-Object {
+        "  $_ = $((Get-ItemProperty "$reg\DenyDeviceIDs").$_)"
+    }
+    Write-Host "--- allowed instance paths (your whitelisted drives' serials) ---"
+    (Get-Item "$reg\AllowInstanceIDs" -ErrorAction SilentlyContinue).Property | ForEach-Object {
+        "  $_ = $((Get-ItemProperty "$reg\AllowInstanceIDs").$_)"
+    }
+    Write-Host "--- scheduled tasks ---"
+    Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -in @($taskSync, $taskPlug) } |
+        Select-Object TaskName, State | Format-Table -AutoSize
+    Write-Host "--- devices in error state (expect NONE except blocked non-whitelisted sticks) ---"
+    Get-CimInstance Win32_PnPEntity -Filter "ConfigManagerErrorCode <> 0" |
+        Select-Object Name, ConfigManagerErrorCode | Format-Table -AutoSize
+
+    Write-Host "DONE. Storage-only USB control is active." -ForegroundColor Green
+    Write-Host "Camera/keyboard/mouse/Bluetooth/hubs are OUTSIDE this policy."
+    Write-Host "Log: $localLog"
+    exit 0
+}
+
+# ============================================================================
+# SYNC MODE - running as the installed copy (scheduled task, SYSTEM)
+# ============================================================================
 
 # ---- single-instance guard (5-min task + on-plug task can fire together) ----
 $mutex = New-Object System.Threading.Mutex($false, 'Global\WazuhUsbSyncV3')
@@ -73,12 +226,14 @@ try {
 if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path $workDir -Force | Out-Null }
 
 # ---- central self-update from the manager-pushed shared copy ----
+# Only ever runs in sync mode, so it can never overwrite the copy you launched
+# the install from (e.g. the one on your Desktop).
 try {
-    if ((Test-Path $sharedSelf) -and ($PSCommandPath) -and ($sharedSelf -ne $PSCommandPath)) {
+    if (Test-Path $sharedSelf) {
         $newHash = (Get-FileHash -Path $sharedSelf -Algorithm SHA256).Hash
-        $curHash = (Get-FileHash -Path $PSCommandPath -Algorithm SHA256).Hash
+        $curHash = (Get-FileHash -Path $installPath -Algorithm SHA256).Hash
         if ($newHash -ne $curHash) {
-            Copy-Item -Path $sharedSelf -Destination $PSCommandPath -Force
+            Copy-Item -Path $sharedSelf -Destination $installPath -Force
             Write-Log "self-updated from manager-pushed shared copy (takes effect next run)"
         }
     }
@@ -176,8 +331,25 @@ $allowPath = "$regPath\AllowInstanceIDs"
 
 $desiredState = (@($allowInstances | Sort-Object) + 'DENY=USB\Class_08;LAYERED') -join ';'
 $lastState = if (Test-Path $stateFile) { Get-Content $stateFile -Raw -ErrorAction SilentlyContinue } else { '' }
+
+# CONTAMINATION CHECK (learned the hard way): another USB-control tool (e.g. the
+# old v1/v2 block-all design) can write its legacy values into the SAME policy
+# key while our state file still matches. DenyUnspecified=1 then silently
+# block-alls the machine again - cameras, Bluetooth, any new device - even
+# though our own values are all present and "intact". So treat ANY legacy value
+# as a reason to rewrite the whole policy, which also strips them.
+$legacyValues = @('DenyUnspecified','AllowDeviceIDs','AllowDeviceIDsEnabled','AllowDeviceIDsRetroactive','AllowDeviceClasses')
+$legacyFound = @()
+foreach ($lv in $legacyValues) {
+    if ($null -ne (Get-ItemProperty -Path $regPath -Name $lv -ErrorAction SilentlyContinue).$lv) { $legacyFound += $lv }
+}
+if ($legacyFound.Count -gt 0) {
+    Write-Log "CONTAMINATION: foreign block-all value(s) found in the policy key [$($legacyFound -join ', ')] - another USB tool is fighting this one. Stripping them and reapplying storage-only policy."
+}
+
 $policyIntact = (Test-Path $allowPath) -and
-    ((Get-ItemProperty -Path $regPath -Name DenyDeviceIDs -ErrorAction SilentlyContinue).DenyDeviceIDs -eq 1)
+    ((Get-ItemProperty -Path $regPath -Name DenyDeviceIDs -ErrorAction SilentlyContinue).DenyDeviceIDs -eq 1) -and
+    ($legacyFound.Count -eq 0)
 
 if (($lastState.Trim() -ne $desiredState) -or (-not $policyIntact)) {
     foreach ($p in @($regPath, $denyPath, $allowPath)) {
@@ -204,7 +376,7 @@ if (($lastState.Trim() -ne $desiredState) -or (-not $policyIntact)) {
     # remove every artifact of the old block-all design (v1/v2): DenyUnspecified
     # blocked ALL new device types (hubs, phones, new keyboards...) and needed
     # storage-layer + class-exemption workarounds. None of that exists in v3.
-    foreach ($legacyVal in @('DenyUnspecified','AllowDeviceIDs','AllowDeviceIDsEnabled','AllowDeviceIDsRetroactive','AllowDeviceClasses')) {
+    foreach ($legacyVal in $legacyValues) {
         Remove-ItemProperty -Path $regPath -Name $legacyVal -Force -ErrorAction SilentlyContinue
     }
     foreach ($legacyKey in @("$regPath\AllowDeviceIDs", "$regPath\AllowDeviceClasses")) {

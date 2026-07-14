@@ -2,11 +2,11 @@
 
 Centralized, manager-pushed USB **mass-storage** control. A single `usb_whitelist.txt` on the Wazuh Manager distributes to every agent; the agent enforces it with Windows **Device Installation Restrictions**, scoped to USB storage ONLY. Keyboards, mice, cameras, Bluetooth, hubs, phones are never touched.
 
-Files (all under `windows/`):
-- `install-usb-v3.ps1` — per-agent installer (run once, elevated)
-- `hybrid_sync_usb.ps1` — v3 sync engine (deployed to `C:\ProgramData\WazuhUsbSync`)
-- `uninstall-usb-control.ps1` — full cleanup
-- `get_usb_info.ps1` — list USB devices for whitelisting
+## Files (under `windows/`)
+
+- **`hybrid_sync_usb.ps1`** — one file, dual-mode: **INSTALL** when run from anywhere except the install path; **SYNC** when run from `C:\ProgramData\WazuhUsbSync` (by the scheduled task as SYSTEM). Run it once, elevated, and it does everything: removes old v1/v2 leftovers, repairs wrongly-disabled devices, copies itself to the install path, registers two SYSTEM scheduled tasks (startup + every 5 min, plus a Kernel-PnP on-plug trigger), runs the first sync, prints verification.
+- **`uninstall-usb-control.ps1`** — full cleanup (policy + script + tasks + re-enable wrongly-disabled devices).
+- **`get_usb_info.ps1`** — list USB devices for whitelisting (use `-Storage` for drives only).
 
 ## How it works (v3 design)
 
@@ -17,18 +17,20 @@ Files (all under `windows/`):
 
 ## Quick Start — One-line install (admin PowerShell)
 
-Downloads all 4 files directly from GitHub (no zip / no releases folder). Run elevated:
+Downloads the 3 files directly from GitHub (no zip / no releases folder), then runs the installer elevated:
 
 ```powershell
-$base='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/windows';$d="$env:TEMP\usbsync-v3";New-Item -ItemType Directory -Path $d -Force | Out-Null;iwr "$base\install-usb-v3.ps1" -OutFile "$d\install-usb-v3.ps1" -UseBasicParsing;iwr "$base\hybrid_sync_usb.ps1" -OutFile "$d\hybrid_sync_usb.ps1" -UseBasicParsing;iwr "$base\get_usb_info.ps1" -OutFile "$d\get_usb_info.ps1" -UseBasicParsing;iwr "$base\uninstall-usb-control.ps1" -OutFile "$d\uninstall-usb-control.ps1" -UseBasicParsing;Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"$d\install-usb-v3.ps1"
+$base='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/windows';$d="$env:TEMP\usbsync-v3";New-Item -ItemType Directory -Path $d -Force | Out-Null;iwr "$base\hybrid_sync_usb.ps1" -OutFile "$d\hybrid_sync_usb.ps1" -UseBasicParsing;iwr "$base\uninstall-usb-control.ps1" -OutFile "$d\uninstall-usb-control.ps1" -UseBasicParsing;iwr "$base\get_usb_info.ps1" -OutFile "$d\get_usb_info.ps1" -UseBasicParsing;Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"$d\hybrid_sync_usb.ps1"
 ```
 
-The installer:
-1. removes old v2/v1 leftovers (scheduled task + `C:\ProgramData\Wazuh`)
+The installer (running elevated via the elevated process):
+1. removes old v2/v1 leftovers (scheduled tasks + `C:\ProgramData\Wazuh`)
 2. repairs devices the old v2 script wrongly disabled
-3. installs `hybrid_sync_usb.ps1` to `C:\ProgramData\WazuhUsbSync`
+3. copies `hybrid_sync_usb.ps1` to `C:\ProgramData\WazuhUsbSync`
 4. registers two scheduled tasks (startup + every 5 min, plus a Kernel-PnP on-plug trigger for near-realtime enforcement)
 5. runs first sync and prints verification
+
+After install, all subsequent runs are SYNC mode (triggered by the tasks, not the user). Re-running the install is safe and idempotent.
 
 ## Uninstall
 
@@ -63,3 +65,8 @@ The whitelist is pushed by the Wazuh Manager via shared configuration. If the ma
 ```powershell
 iwr 'https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/windows/get_usb_info.ps1' -OutFile "$env:TEMP\get_usb_info.ps1" -UseBasicParsing;powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\get_usb_info.ps1" -Storage
 ```
+
+## Logs
+
+- App-specific: `C:\ProgramData\WazuhUsbSync\log.txt`
+- Wazuh active-response: `C:\Program Files (x86)\ossec-agent\active-response\active-responses.log` (best-effort, may not be writable under SYSTEM)
