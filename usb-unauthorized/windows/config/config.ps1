@@ -24,13 +24,15 @@ $global:UsbSync = @{
     StateFile          = 'last-state.json'
 
     # Registry policy (allow-list mode)
+    # CRITICAL: Windows reads AllowDeviceIDs as a DWORD enabler + subkey with numbered entries,
+    # NOT AllowDeviceIDsEnabled + MULTI_SZ. Schema must match what PnP engine reads.
     PolicyRoot            = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions'
-    AllowDeviceIdsRoot    = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions'
-    AllowDeviceIdsEnabled = 'AllowDeviceIDsEnabled'
-    AllowDeviceIds        = 'AllowDeviceIDs'
+    AllowDeviceIdsRoot    = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions\AllowDeviceIDs'
+    AllowDeviceIdsEnabler = 'AllowDeviceIDs'  # DWORD=1 at PolicyRoot, enables the allow list
     # Required so devices NOT in the allow list are actually blocked.
-    # Without this, AllowDeviceIDs only *permits* listed devices; others still install.
     DenyUnspecified       = 'DenyUnspecified'
+    # Storage layer wildcards — without these, approved USB drives get Code 28 on mount
+    StorageLayerIds       = @('USBSTOR\GenDisk', 'STORAGE\Volume')
     BackupSubKey          = 'V2Backup'
 
     # Scheduled task

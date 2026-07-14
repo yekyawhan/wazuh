@@ -26,6 +26,7 @@ function Set-UsbAllowList {
         [Parameter(Mandatory)][string[]]$DeviceIds
     )
     $root = $UsbSync.PolicyRoot
+    $subkey = $UsbSync.AllowDeviceIdsRoot
 
     # 1. Backup
     $backup = Backup-PolicyState
@@ -35,15 +36,30 @@ function Set-UsbAllowList {
         New-Item -Path $root -Force | Out-Null
     }
 
-    # 3. Write
+    # 3. Write — Windows reads AllowDeviceIDs as DWORD enabler + numbered subkey entries
     try {
-        Set-ItemProperty -LiteralPath $root -Name $UsbSync.AllowDeviceIdsEnabled -Value 1 -Type DWord
-        # Block everything not explicitly allowed (else the allow-list is toothless).
+        # Enable allow-list mode at root
+        Set-ItemProperty -LiteralPath $root -Name $UsbSync.AllowDeviceIdsEnabler -Value 1 -Type DWord
+        # Block everything not explicitly allowed
         Set-ItemProperty -LiteralPath $root -Name $UsbSync.DenyUnspecified -Value 1 -Type DWord
-        if ($DeviceIds.Count -gt 0) {
-            Set-ItemProperty -LiteralPath $root -Name $UsbSync.AllowDeviceIds -Value $DeviceIds -Type MultiString
-        } else {
-            Remove-ItemProperty -LiteralPath $root -Name $UsbSync.AllowDeviceIds -ErrorAction SilentlyContinue
+
+        # Remove old subkey if present, recreate fresh
+        if (Test-Path -LiteralPath $subkey) {
+            Remove-Item -LiteralPath $subkey -Recurse -Force
+        }
+        if ($DeviceIds.Count -gt 0 -or $UsbSync.StorageLayerIds.Count -gt 0) {
+            New-Item -Path $subkey -Force | Out-Null
+            # Write user device IDs as numbered REG_SZ entries
+            $index = 1
+            foreach ($id in $DeviceIds) {
+                Set-ItemProperty -LiteralPath $subkey -Name $index.ToString() -Value $id -Type String
+                $index++
+            }
+            # Append storage layer wildcards so approved drives actually mount
+            foreach ($id in $UsbSync.StorageLayerIds) {
+                Set-ItemProperty -LiteralPath $subkey -Name $index.ToString() -Value $id -Type String
+                $index++
+            }
         }
     } catch {
         Write-LogError "Registry write failed: $($_.Exception.Message). Restoring backup."
@@ -74,26 +90,22 @@ function Remove-UsbAllowList {
     [CmdletBinding()]
     param()
     $root = $UsbSync.PolicyRoot
+    $subkey = $UsbSync.AllowDeviceIdsRoot
     $backup = Backup-PolicyState
     try {
         if (Test-Path -LiteralPath $root) {
-            Remove-ItemProperty -LiteralPath $root -Name $UsbSync.AllowDeviceIdsEnabled -ErrorAction SilentlyContinue
-            Remove-ItemProperty -LiteralPath $root -Name $UsbSync.AllowDeviceIds        -ErrorAction SilentlyContinue
-            Remove-ItemProperty -LiteralPath $root -Name $UsbSync.DenyUnspecified       -ErrorAction SilentlyContinue
+            # Remove enabler + deny flag
+            Remove-ItemProperty -LiteralPath $root -Name $UsbSync.AllowDeviceIdsEnabler -ErrorAction SilentlyContinue
+            Remove-ItemProperty -LiteralPath $root -Name $UsbSync.DenyUnspecified -ErrorAction SilentlyContinue
+            # Remove the AllowDeviceIDs subkey with all numbered entries
+            if (Test-Path -LiteralPath $subkey) {
+                Remove-Item -LiteralPath $subkey -Recurse -Force -ErrorAction SilentlyContinue
+            }
             # After all values removed, delete the now-empty parent key so Windows
             # returns fully to "all devices allowed" default state.
             if (-not (Get-Item -LiteralPath $root -ErrorAction SilentlyContinue) -or
                 @((Get-Item -LiteralPath $root).GetValueNames()).Count -eq 0) {
                 Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
-                # Walk up: also drop DeviceInstall key if it's now empty (it usually has children from other policies)
-                # but only if no sibling values remain
-                $parent = Split-Path -LiteralPath $root -Parent
-                if (Test-Path -LiteralPath $parent) {
-                    $siblings = (Get-Item -LiteralPath $parent).GetSubKeyNames()
-                    if ($siblings -notcontains 'Restrictions') {
-                        # parent DeviceInstall still has other subkeys (common) - leave it
-                    }
-                }
             }
         }
         Write-LogAudit "Allow-list removed (uninstall)."
