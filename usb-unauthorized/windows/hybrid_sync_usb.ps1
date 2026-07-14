@@ -39,6 +39,7 @@
 $whitelistFile = "C:\Program Files (x86)\ossec-agent\shared\usb_whitelist.txt"
 $logFile       = "C:\Program Files (x86)\ossec-agent\active-response\active-responses.log"
 $workDir       = "C:\ProgramData\WazuhUsbSync"
+$appLogFile    = "$workDir\log.txt"
 $cacheFile     = "$workDir\instance_cache.txt"
 $stateFile     = "$workDir\applied_state.txt"
 $sharedSelf    = "C:\Program Files (x86)\ossec-agent\shared\hybrid_sync_usb.ps1"
@@ -47,11 +48,18 @@ function Write-Log($message) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $logMessage = "$timestamp - hybrid_sync_usb - $message"
     Write-Host $logMessage
+    # Write to app-specific log (always accessible)
     $retryCount = 0
     while ($retryCount -lt 3) {
-        try { Add-Content -Path $logFile -Value $logMessage -ErrorAction Stop; break }
+        try {
+            Add-Content -Path $appLogFile -Value $logMessage -Encoding utf8 -ErrorAction Stop
+            break
+        }
         catch { $retryCount++; Start-Sleep -Seconds 1 }
     }
+    # Fallback to Wazuh active-responses log (may fail under SYSTEM)
+    try { Add-Content -Path $logFile -Value $logMessage -ErrorAction SilentlyContinue }
+    catch { }
 }
 
 # ---- single-instance guard (5-min task + on-plug task can fire together) ----
