@@ -77,6 +77,27 @@ function Install-UsbSync {
         . (Join-Path $AppRoot 'hybrid_sync_usb_v2.ps1')
         [void](Invoke-HybridUsbSync)
 
+        # 3b. Force re-evaluation of pre-existing USB devices
+        #     Devices plugged in before policy was set remain allowed by Windows.
+        #     Disable/enable cycle forces PnP to re-check them against the new policy.
+        Write-LogInfo 'Re-scanning connected USB devices to enforce policy on pre-existing devices...'
+        try {
+            $usbDevices = Get-PnpDevice -Class USB -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'OK' }
+            $count = 0
+            foreach ($dev in $usbDevices) {
+                try {
+                    Disable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction SilentlyContinue
+                    Enable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction SilentlyContinue
+                    $count++
+                } catch {
+                    Write-LogDebug "Could not re-scan device $($dev.InstanceId): $($_.Exception.Message)"
+                }
+            }
+            Write-LogInfo "Re-scanned $count USB device(s). Non-whitelisted devices are now blocked."
+        } catch {
+            Write-LogWarning "USB device re-scan failed: $($_.Exception.Message). Pre-existing devices may remain allowed until unplugged."
+        }
+
         # 4. Start the task now so the watcher runs without waiting for a reboot
         Start-ScheduledTask -TaskName $UsbSync.TaskName -ErrorAction SilentlyContinue
         Write-LogInfo 'Scheduled task started (watcher active).'
