@@ -1,189 +1,65 @@
-# Wazuh Hybrid USB Sync — Windows V2
+# Wazuh USB Storage-Only Control — Windows V3
 
-Production USB whitelist enforcement for Windows agents. Whitelist is distributed by the Wazuh Manager through `agent.conf` (shared configuration) and applied locally via Device Installation Restrictions.
+Centralized, manager-pushed USB **mass-storage** control. A single `usb_whitelist.txt` on the Wazuh Manager distributes to every agent; the agent enforces it with Windows **Device Installation Restrictions**, scoped to USB storage ONLY. Keyboards, mice, cameras, Bluetooth, hubs, phones are never touched.
 
-Mirrors the Linux V2 implementation in `../v2/`.
+Files (all under `windows/`):
+- `install-usb-v3.ps1` — per-agent installer (run once, elevated)
+- `hybrid_sync_usb.ps1` — v3 sync engine (deployed to `C:\ProgramData\WazuhUsbSync`)
+- `uninstall-usb-control.ps1` — full cleanup
+- `get_usb_info.ps1` — list USB devices for whitelisting
 
----
+## How it works (v3 design)
 
-## Features
+- **DENY** `USB\Class_08` (mass-storage interface) with `DenyDeviceIDsRetroactive=1` → already-installed drives are also blocked.
+- **ALLOW** whitelisted drives by exact instance path (`VID&PID\SERIAL`) with `AllowDenyLayered=1` → whitelist wins over the deny.
+- **PURGE** cached devnodes of non-whitelisted storage so every replug is a fresh install → blocked.
+- No `DenyUnspecified` — only storage is restricted.
 
-- **Manager-pushed whitelist** — single source of truth, every agent in sync
-- **Allow-list policy** — only whitelisted USB device IDs may install
-- **File watcher** — whitelist change → auto re-sync within 3 seconds
-- **Atomic apply** — backup → write → verify → restore on failure
-- **Scheduled Task** — runs as `SYSTEM`, restarts on failure
-- **Enterprise logging** — file + Windows Event Log (Application / WazuhUsbSync)
-- **Idempotent** — installer + uninstaller safe to re-run
-- **Pester tests** — parser + registry round-trip coverage
+## Quick Start — One-line install (admin PowerShell)
 
----
-
-## Quick Start
-
-### One-line install (recommended)
-
-**Use the GitHub raw URL (always current, no CDN cache issues).** From any PowerShell (will auto-elevate):
+Downloads all 4 files directly from GitHub (no zip / no releases folder). Run elevated:
 
 ```powershell
-$iwr='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip';$tmp=(Join-Path $env:TEMP ([guid]::NewGuid()))+'.zip';[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $iwr -OutFile $tmp -UseBasicParsing;New-Item -ItemType Directory -Path 'C:\ProgramData\Wazuh' -Force | Out-Null;Expand-Archive $tmp -DestinationPath 'C:\ProgramData\Wazuh' -Force;$ps1=Get-ChildItem -Path 'C:\ProgramData\Wazuh' -Recurse -Filter 'install_usb_sync_windows.ps1' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName;if(-not $ps1){Write-Error 'install_usb_sync_windows.ps1 not found in expanded zip';exit 1};Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',$ps1
+$base='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/windows';$d="$env:TEMP\usbsync-v3";New-Item -ItemType Directory -Path $d -Force | Out-Null;iwr "$base\install-usb-v3.ps1" -OutFile "$d\install-usb-v3.ps1" -UseBasicParsing;iwr "$base\hybrid_sync_usb.ps1" -OutFile "$d\hybrid_sync_usb.ps1" -UseBasicParsing;iwr "$base\get_usb_info.ps1" -OutFile "$d\get_usb_info.ps1" -UseBasicParsing;iwr "$base\uninstall-usb-control.ps1" -OutFile "$d\uninstall-usb-control.ps1" -UseBasicParsing;Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"$d\install-usb-v3.ps1"
 ```
 
-The one-liner **finds `install_usb_sync_windows.ps1` anywhere in the expanded tree** — works whether the zip uses a wrapper folder or not, works whether the CDN has a stale cached version or a fresh one.
+The installer:
+1. removes old v2/v1 leftovers (scheduled task + `C:\ProgramData\Wazuh`)
+2. repairs devices the old v2 script wrongly disabled
+3. installs `hybrid_sync_usb.ps1` to `C:\ProgramData\WazuhUsbSync`
+4. registers two scheduled tasks (startup + every 5 min, plus a Kernel-PnP on-plug trigger for near-realtime enforcement)
+5. runs first sync and prints verification
 
-If you already have an **admin** PowerShell open, drop the `Start-Process -Verb RunAs` part:
+## Uninstall
 
 ```powershell
-$iwr='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip';$tmp=(Join-Path $env:TEMP ([guid]::NewGuid()))+'.zip';[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $iwr -OutFile $tmp -UseBasicParsing;New-Item -ItemType Directory -Path 'C:\ProgramData\Wazuh' -Force | Out-Null;Expand-Archive $tmp -DestinationPath 'C:\ProgramData\Wazuh' -Force;$ps1=Get-ChildItem -Path 'C:\ProgramData\Wazuh' -Recurse -Filter 'install_usb_sync_windows.ps1' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName;if(-not $ps1){Write-Error 'install_usb_sync_windows.ps1 not found in expanded zip';exit 1};powershell -NoProfile -ExecutionPolicy Bypass -File $ps1
+Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','C:\ProgramData\WazuhUsbSync\uninstall-usb-control.ps1'
 ```
 
-CDN alternative (jsdelivr — has ~12h cache, may serve stale):
+Or download then run:
+```powershell
+$base='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/windows';iwr "$base\uninstall-usb-control.ps1" -OutFile "$env:TEMP\uninstall-usb-control.ps1" -UseBasicParsing;Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"$env:TEMP\uninstall-usb-control.ps1"
+```
+
+## Whitelist format
+
+On the Manager's `usb_whitelist.txt` (`/var/ossec/etc/shared/default/usb_whitelist.txt`):
+
+```
+# VID:PID (any stick of that model)
+0781:556b
+# or Windows hardware ID
+USB\VID_0781&PID_556B
+# or full instance path (pin ONE exact physical stick)
+USB\VID_0781&PID_556B\070B7C86...
+```
+
+## Centralization
+
+The whitelist is pushed by the Wazuh Manager via shared configuration. If the manager also drops a newer `hybrid_sync_usb.ps1` into the shared folder, the local copy self-updates on every sync — no reinstall needed.
+
+## Find a device ID to whitelist
 
 ```powershell
-$iwr='https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip'
+iwr 'https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/windows/get_usb_info.ps1' -OutFile "$env:TEMP\get_usb_info.ps1" -UseBasicParsing;powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\get_usb_info.ps1" -Storage
 ```
-
-(substitute the `$iwr` value, then use the rest of the one-liner above)
-
-### Install from local source
-
-```cmd
-cd windows
-install.cmd
-```
-
-Auto-elevates to Administrator. First sync runs immediately.
-
-### Uninstall
-
-```powershell
-& 'C:\ProgramData\Wazuh\usb-unauthorized-windows-v2\uninstall\uninstall_usb_sync_windows.ps1' --purge-logs
-```
-
-Or `cd windows && uninstall.cmd` from a local source tree.
-
----
-
-## Whitelist Format
-
-Wazuh Manager pushes `usb_whitelist.txt` to:
-
-```
-C:\Program Files (x86)\ossec-agent\shared\usb_whitelist.txt
-```
-
-Both formats supported per line. Comments (`#`) and blank lines ignored.
-
-```text
-# Windows-style
-USB\VID_0951&PID_1666
-USB\VID_0781&PID_5571
-
-# Linux-style (same file, both OSes read it)
-0951:1666
-0781:5571
-```
-
----
-
-## Architecture
-
-See [Architecture.md](docs/Architecture.md).
-
-| Layer | Module |
-|-------|--------|
-| Entry point | `hybrid_sync_usb_v2.ps1` |
-| One-shot sync | `Invoke-HybridUsbSync` |
-| Watcher mode | `Start-HybridUsbWatcher` |
-| Whitelist parsing | `modules/Parser.psm1` |
-| Registry engine | `modules/Registry.psm1` |
-| Policy apply | `modules/Policy.psm1` |
-| File watcher | `modules/Watcher.psm1` |
-| Logging | `modules/Logger.psm1` |
-| Utilities | `modules/Utils.psm1` |
-| Config | `config/config.ps1` |
-
----
-
-## Files & Paths
-
-| Purpose | Path |
-|---------|------|
-| Whitelist (input) | `C:\Program Files (x86)\ossec-agent\shared\usb_whitelist.txt` |
-| App data | `C:\ProgramData\Wazuh\UsbSync` |
-| Logs | `C:\ProgramData\Wazuh\Logs\UsbSync\usb-sync.log` |
-| Install log | `C:\ProgramData\Wazuh\Logs\UsbSync\install.log` |
-| Registry policy | `HKLM\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions` |
-| Scheduled task | `\Wazuh Hybrid USB Sync` |
-
----
-
-## Operational Use
-
-### Run one-shot sync manually
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\hybrid_sync_usb_v2.ps1
-```
-
-### Run in watcher mode (foreground)
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\hybrid_sync_usb_v2.ps1 --watch
-```
-
-### Inspect policy
-
-```powershell
-Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions'
-```
-
-### Check scheduled task
-
-```powershell
-Get-ScheduledTask -TaskName 'Wazuh Hybrid USB Sync' | Get-ScheduledTaskInfo
-```
-
-### Tail logs
-
-```powershell
-Get-Content 'C:\ProgramData\Wazuh\Logs\UsbSync\usb-sync.log' -Wait
-```
-
-### Event log
-
-```powershell
-Get-WinEvent -LogName Application -Source WazuhUsbSync -MaxEvents 50
-```
-
----
-
-## Testing
-
-Requires Pester (`Install-Module Pester -Force`). Full step-by-step: 👉 **[TESTING.md](docs/TESTING.md)** (includes manual end-to-end smoke test).
-
-```powershell
-Invoke-Pester -Path tests\Parser.Tests.ps1
-Invoke-Pester -Path tests\Registry.Tests.ps1     # requires Administrator (writes HKLM)
-```
-
----
-
-## Compatibility
-
-- Windows 10 (1809+)
-- Windows 11
-- Windows Server 2019
-- Windows Server 2022
-- PowerShell 5.1 (ships with Windows) and 7.x
-- Wazuh Agent 4.x (uses `<shared>` agent.conf block)
-
----
-
-## See Also
-
-- [Guide](docs/guide.md)
-- [Architecture](docs/Architecture.md)
-- [Troubleshooting](docs/Troubleshooting.md)
-- [Changelog](docs/CHANGELOG.md)
-- [Linux V2](../v2/)

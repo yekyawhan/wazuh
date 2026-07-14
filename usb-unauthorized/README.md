@@ -22,17 +22,17 @@ Windows နှင့် Linux စက်များတွင် ခွင့်�
 ### 1. Onboard an endpoint (one time, per agent)
 Deploys the sync script, enables the required setting, restarts the agent, and runs it once. **Run as Administrator (Windows) / root (Linux).**
 
-**Windows** — GitHub raw (recommended, always current):
+**Windows** — V3 (recommended, no zip — direct per-file download):
 ```powershell
-$iwr='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip';$tmp=(Join-Path $env:TEMP ([guid]::NewGuid()))+'.zip';[Net.ServicePointManager]::SecurityProtocol='Tls12';iwr $iwr -OutFile $tmp -UseBasicParsing;New-Item -ItemType Directory -Path 'C:\ProgramData\Wazuh' -Force | Out-Null;Expand-Archive $tmp -DestinationPath 'C:\ProgramData\Wazuh' -Force;$ps1=Get-ChildItem -Path 'C:\ProgramData\Wazuh' -Recurse -Filter 'install_usb_sync_windows.ps1' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName;if(-not $ps1){Write-Error 'install_usb_sync_windows.ps1 not found in expanded zip';exit 1};Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',$ps1
+$base='https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/usb-unauthorized/windows';$d="$env:TEMP\usbsync-v3";New-Item -ItemType Directory -Path $d -Force | Out-Null;iwr "$base\install-usb-v3.ps1" -OutFile "$d\install-usb-v3.ps1" -UseBasicParsing;iwr "$base\hybrid_sync_usb.ps1" -OutFile "$d\hybrid_sync_usb.ps1" -UseBasicParsing;iwr "$base\get_usb_info.ps1" -OutFile "$d\get_usb_info.ps1" -UseBasicParsing;iwr "$base\uninstall-usb-control.ps1" -OutFile "$d\uninstall-usb-control.ps1" -UseBasicParsing;Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"$d\install-usb-v3.ps1"
 ```
 
 Windows — CDN (jsdelivr, may serve stale for ~12h):
 ```powershell
-$iwr='https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/releases/usb-unauthorized-windows-v2.zip'
+$base='https://cdn.jsdelivr.net/gh/yekyawhan/wazuh@git-home/usb-unauthorized/windows'
 ```
 
-The one-liner **finds the install script anywhere in the expanded zip tree** (works whether the zip has a wrapper folder or not). Just substitute the `$iwr` value.
+(Use the same per-file download pattern; substitute the `$base` value.)
 
 **Linux** — CDN (recommended):
 ```bash
@@ -79,8 +79,9 @@ Full manager + endpoint walkthrough: 👉 **[Detailed Setup Guide](assets/guide.
 | `enable-usb-sync.ps1` | Windows V1 onboarding helper (legacy). |
 | `hybrid_sync_usb_linux.sh` | Linux V1 sync (legacy, superseded by `v2/`). |
 | `get_usb_info.ps1` / `.sh` | Helper to find a device's VID/PID (clean output). |
-| `windows/` | Windows V2 — modules, installer, uninstaller, tests, docs. |
-| `windows/install.cmd` | Windows V2 one-line bootstrap (auto-elevates). |
-| `releases/usb-unauthorized-windows-v2.zip` | Windows V2 offline-installable release archive. |
+| `windows/install-usb-v3.ps1` | Windows V3 per-agent installer (run once, elevated). |
+| `windows/hybrid_sync_usb.ps1` | Windows V3 sync engine — storage-only USB control via Device Installation Restrictions + devnode purge. |
+| `windows/uninstall-usb-control.ps1` | Windows V3 full agent cleanup (policy + script + tasks). |
+| `windows/get_usb_info.ps1` | List USB devices (raw/whitelist ID/InstanceID) for adding to the whitelist. |
 | `assets/guide.md` | Detailed setup guide. |
 | `assets/flow.svg` | Architecture diagram. |
