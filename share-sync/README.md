@@ -9,12 +9,13 @@ Supported files:
 - PowerShell scripts (`*.ps1`)
 - Windows batch scripts (`*.cmd`)
 - Executable tools (`*.exe`)
+- Linux scripts (`*.sh`)
 
 The purpose is to maintain a centralized **Golden Source** for Wazuh Active Response tools and automatically distribute updates to all agents.
 
 ## Deployment Overview
 
-This folder provides **two deployment variants** for Windows endpoints — pick one:
+This folder provides deployment variants for endpoints — pick one:
 
 | Variant | Folder | Mechanism | Sync timing |
 |---|---|---|---|
@@ -22,7 +23,7 @@ This folder provides **two deployment variants** for Windows endpoints — pick 
 | **Task Scheduler (Win)** | `windows-task-Schedular-style/` | Scheduled task under `SYSTEM` | Every 1 minute |
 | **Linux (Systemd Timer)** | `linux/` | Systemd `oneshot` service + timer | Every 1 minute |
 
-Each folder is self-contained: drop it into `C:\Program Files (x86)\ossec-agent\shared\` and run its installer.
+Each folder is self-contained: drop it into the Wazuh agent shared directory (`C:\Program Files (x86)\ossec-agent\shared\` or `/var/ossec/etc/shared/`) and run its installer.
 
 ---
 
@@ -39,11 +40,11 @@ Each folder is self-contained: drop it into `C:\Program Files (x86)\ossec-agent\
                 |
                 v
 
-C:\Program Files (x86)\ossec-agent\shared
+Agent shared/
 
                 |
                 |
-         Wazuh Share Sync Service
+         Wazuh Share Sync
 
                 |
                 v
@@ -60,9 +61,9 @@ active-response\bin\
 
 ## File Synchronization
 
-Automatically sync files from `ossec-agent\shared` to `ossec-agent\active-response\bin`.
+Automatically sync files from agent `shared/` to `active-response\bin`.
 
-Supported extensions: `*.ps1`, `*.cmd`, `*.exe`.
+Supported extensions: `*.ps1`, `*.cmd`, `*.exe`, `*.sh`, `*.py`, `*.bin`.
 
 ## Integrity Validation
 
@@ -74,21 +75,13 @@ The Wazuh Manager shared directory is treated as the master source. Any local mo
 
 ## Remote Command Enable
 
-The service variant automatically enables Wazuh remote command execution by writing `wazuh_command.remote_commands=1` and `logcollector.remote_commands=1` into `local_internal_options.conf`. The Wazuh service is restarted only when configuration changes are detected.
+The Windows service variant automatically enables Wazuh remote command execution by writing `wazuh_command.remote_commands=1` and `logcollector.remote_commands=1` into `local_internal_options.conf`. The Wazuh service is restarted only when configuration changes are detected.
 
 ## Logging
 
-Log file: `C:\Program Files (x86)\ossec-agent\active-response\share-sync.log`
-
-Example:
-
-```
-2026-07-15 12:00:01 ===== Sync Start =====
-2026-07-15 12:00:02 SYNCED : block-ip.cmd
-2026-07-15 12:00:02 SYNCED : kill-process.ps1
-2026-07-15 12:00:03 WazuhSvc restarted
-2026-07-15 12:00:03 ===== Sync Complete =====
-```
+Log file: 
+- Windows: `C:\Program Files (x86)\ossec-agent\active-response\share-sync.log`
+- Linux: `/var/ossec/logs/share-sync.log`
 
 ---
 
@@ -96,13 +89,13 @@ Example:
 
 ## Requirements
 
-- Windows endpoint
-- Wazuh Agent installed (default path `C:\Program Files (x86)\ossec-agent`)
-- Administrator privileges
+- Windows/Linux endpoint
+- Wazuh Agent installed
+- Root/Administrator privileges
 
 ## Quick Install
 
-Pick a variant, then from an **elevated PowerShell** prompt.
+Pick a variant and run the installer from a privileged prompt.
 
 ### Variant A — NSSM Windows Service (recommended, real-time)
 
@@ -111,26 +104,42 @@ Copy-Item -Recurse windows-service-style\* "C:\Program Files (x86)\ossec-agent\s
 PowerShell -ExecutionPolicy Bypass -File "C:\Program Files (x86)\ossec-agent\shared\install.ps1"
 ```
 
-Installs NSSM, creates & starts the `WazuhShareSync` service (auto-start, auto-restart, `FileSystemWatcher`-driven sync).
+Installs NSSM, creates & starts the `WazuhShareSync` service.
 
 Uninstall:
 ```powershell
 PowerShell -ExecutionPolicy Bypass -File "C:\Program Files (x86)\ossec-agent\shared\install.ps1" -Uninstall
 ```
 
-### Variant B — Task Scheduler (no extra dependencies)
+### Variant B — Task Scheduler (Win, no extra dependencies)
 
 ```powershell
 Copy-Item -Recurse windows-task-Schedular-style\* "C:\Program Files (x86)\ossec-agent\shared\"
 PowerShell -ExecutionPolicy Bypass -File "C:\Program Files (x86)\ossec-agent\shared\install-sync-task.ps1"
 ```
 
-Registers a `SYSTEM` task that runs every 1 minute. No NSSM required; no real-time watcher — relies on the 1-minute interval.
+Registers a `SYSTEM` task that runs every 1 minute.
 
 Uninstall:
 ```powershell
 Unregister-ScheduledTask -TaskName "Wazuh Share Sync" -Confirm:$false
 ```
+
+### Variant C — Linux (Systemd Timer)
+
+**Online (Direct download):**
+```bash
+sudo curl -o /var/ossec/etc/shared/share-sync.sh https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/share-sync/linux/share-sync.sh
+sudo curl -o /var/ossec/etc/shared/install-share-sync.sh https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/share-sync/linux/install-share-sync.sh
+sudo chmod +x /var/ossec/etc/shared/share-sync.sh /var/ossec/etc/shared/install-share-sync.sh && sudo /var/ossec/etc/shared/install-share-sync.sh
+```
+
+**Offline (Local files):**
+```bash
+sudo chmod +x /var/ossec/etc/shared/share-sync.sh /var/ossec/etc/shared/install-share-sync.sh && sudo /var/ossec/etc/shared/install-share-sync.sh
+```
+
+Creates systemd service + timer (`wazuh-share-sync.timer`) running every 1 minute.
 
 ---
 
@@ -146,14 +155,6 @@ The service provides:
 
 ---
 
-# Future Roadmap
-
-## Linux Support
-
-Linux version will provide the same functionality with `systemd` service support and SHA256 validation.
-
----
-
 # Project Structure
 
 ```
@@ -162,9 +163,12 @@ share-sync/
 ├── windows-service-style/          # NSSM service variant (real-time)
 │   ├── install.ps1                  # single-file deployer (embeds service installer)
 │   └── share-sync.ps1               # runtime (FileSystemWatcher)
-└── windows-task-Schedular-style/   # Task Scheduler variant (1-min interval)
-    ├── install-sync-task.ps1       # registers SYSTEM scheduled task
-    └── share-sync.ps1              # one-shot sync runtime
+├── windows-task-Schedular-style/   # Task Scheduler variant (1-min interval)
+│   ├── install-sync-task.ps1       # registers SYSTEM scheduled task
+│   └── share-sync.ps1               # one-shot sync runtime
+└── linux/                          # Linux variant (1-min interval)
+    ├── install-share-sync.sh       # registers systemd service + timer
+    └── share-sync.sh               # one-shot sync runtime
 ```
 
 ---
