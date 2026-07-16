@@ -19,7 +19,8 @@ This folder provides **two deployment variants** for Windows endpoints — pick 
 | Variant | Folder | Mechanism | Sync timing |
 |---|---|---|---|
 | **NSSM Windows Service** (recommended) | `windows-service-style/` | NSSM-wrapped `powershell.exe` service | Real-time via `FileSystemWatcher` + 5 min safety-net resync |
-| **Task Scheduler** (no extra deps) | `windows-task-Schedular-style/` | Scheduled task under `SYSTEM` | Every 1 minute (one-shot per run) |
+| **Task Scheduler (Win)** | `windows-task-Schedular-style/` | Scheduled task under `SYSTEM` | Every 1 minute |
+| **Linux (Systemd Timer)** | `linux/` | Systemd `oneshot` service + timer | Every 1 minute |
 
 Each folder is self-contained: drop it into `C:\Program Files (x86)\ossec-agent\shared\` and run its installer.
 
