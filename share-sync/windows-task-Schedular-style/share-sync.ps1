@@ -7,13 +7,9 @@
 
 $Source = "C:\Program Files (x86)\ossec-agent\shared"
 
-$Destination = `
-"C:\Program Files (x86)\ossec-agent\active-response\bin"
+$Destination = "C:\Program Files (x86)\ossec-agent\active-response\bin"
 
-
-$LogFile = `
-"C:\Program Files (x86)\ossec-agent\active-response\share-sync.log"
-
+$LogFile = "C:\Program Files (x86)\ossec-agent\active-response\share-sync.log"
 
 
 $Extensions = @(
@@ -26,72 +22,76 @@ $Extensions = @(
 
 function Write-Log {
 
-    param($msg)
+    param(
+        [string]$Message
+    )
 
-    $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $Time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
     Add-Content `
-    -Path $LogFile `
-    -Value "$time $msg"
-
+        -Path $LogFile `
+        -Value "$Time $Message"
 }
 
 
 
-Write-Log "===== Sync Start ====="
-
-
-
-foreach($ext in $Extensions){
-
+foreach($Ext in $Extensions)
+{
 
     Get-ChildItem `
-    $Source `
-    -Filter $ext `
-    -File `
-    -ErrorAction SilentlyContinue | ForEach-Object {
+        -Path $Source `
+        -Filter $Ext `
+        -File `
+        -ErrorAction SilentlyContinue | ForEach-Object {
+
+
+        $SourceFile = $_.FullName
+
+        $DestinationFile = Join-Path `
+            $Destination `
+            $_.Name
 
 
 
-        $src = $_.FullName
-
-
-        $dst = Join-Path `
-        $Destination `
-        $_.Name
+        $NeedCopy = $false
 
 
 
-        $copy=$false
+        if(!(Test-Path $DestinationFile))
+        {
 
-
-
-        if(!(Test-Path $dst)){
-
-            $copy=$true
+            $NeedCopy = $true
 
         }
+        else
+        {
 
-        else{
+            try {
 
-
-            $srcHash =
-            (Get-FileHash `
-            $src `
-            -Algorithm SHA256).Hash
-
-
-
-            $dstHash =
-            (Get-FileHash `
-            $dst `
-            -Algorithm SHA256).Hash
+                $SourceHash = (
+                    Get-FileHash `
+                    -Path $SourceFile `
+                    -Algorithm SHA256
+                ).Hash
 
 
+                $DestinationHash = (
+                    Get-FileHash `
+                    -Path $DestinationFile `
+                    -Algorithm SHA256
+                ).Hash
 
-            if($srcHash -ne $dstHash){
 
-                $copy=$true
+                if($SourceHash -ne $DestinationHash)
+                {
+                    $NeedCopy = $true
+                }
+
+            }
+            catch {
+
+                Write-Log `
+                "HASH ERROR : $($_.Name) - $($_.Exception.Message)"
 
             }
 
@@ -99,29 +99,35 @@ foreach($ext in $Extensions){
 
 
 
-        if($copy){
+        if($NeedCopy)
+        {
+
+            try
+            {
+
+                Copy-Item `
+                    -Path $SourceFile `
+                    -Destination $DestinationFile `
+                    -Force `
+                    -ErrorAction Stop
 
 
-            Copy-Item `
-            $src `
-            $dst `
-            -Force
+                Write-Log `
+                "SYNC : $($_.Name)"
 
 
+            }
+            catch
+            {
 
-            Write-Log `
-            "SYNC : $($_.Name)"
+                Write-Log `
+                "ERROR : $($_.Name) - $($_.Exception.Message)"
+
+            }
 
         }
 
 
     }
 
-
 }
-
-
-
-Write-Log "===== Sync Complete ====="
-
-
