@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1100" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#555555"/>
+    </marker>
+  </defs>
+
+  <rect width="1000" height="1100" fill="#FFFFFF"/>
+
+  <text x="500" y="35" text-anchor="middle" font-size="22" font-weight="bold" fill="#1F4E79">USB Whitelist Enforcement — Workflow</text>
+
+  <!-- Box A: Manager -->
+  <rect x="300" y="70" width="400" height="110" fill="#DDEBF7" stroke="#1F4E79" stroke-width="1.5"/>
+  <rect x="300" y="70" width="400" height="30" fill="#1F4E79"/>
+  <text x="500" y="90" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">WAZUH MANAGER</text>
+  <text x="500" y="117" text-anchor="middle" font-size="12.5" fill="#333333">Shared Group Config Folder (cybergp)</text>
+  <text x="500" y="135" text-anchor="middle" font-size="12" fill="#333333">• hybrid-sync-usb.ps1</text>
+  <text x="500" y="151" text-anchor="middle" font-size="12" fill="#333333">• hybrid-sync-usb.cmd</text>
+  <text x="500" y="167" text-anchor="middle" font-size="12" fill="#333333">• usb-whitelist.txt</text>
+
+  <!-- Arrow A -> B -->
+  <line x1="500" y1="180" x2="500" y2="207" stroke="#555555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="515" y="198" font-size="11.5" font-style="italic" fill="#666666">shared-file sync</text>
+
+  <!-- Box B: Agent -->
+  <rect x="300" y="210" width="400" height="70" fill="#DDEBF7" stroke="#1F4E79" stroke-width="1.5"/>
+  <rect x="300" y="210" width="400" height="26" fill="#1F4E79"/>
+  <text x="500" y="228" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">WINDOWS AGENT</text>
+  <text x="500" y="255" text-anchor="middle" font-size="12" font-family="Consolas, 'Courier New', monospace" fill="#333333">...\ossec-agent\shared\</text>
+  <text x="500" y="272" text-anchor="middle" font-size="11.5" fill="#333333">(files land locally)</text>
+
+  <!-- Arrow B -> C -->
+  <line x1="500" y1="280" x2="500" y2="307" stroke="#555555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="515" y="298" font-size="11.5" font-style="italic" fill="#666666">executes hybrid-sync-usb.ps1 (via .cmd)</text>
+
+  <!-- Box C: ProgramData provisioning -->
+  <rect x="250" y="310" width="500" height="140" fill="#DDEBF7" stroke="#1F4E79" stroke-width="1.5"/>
+  <rect x="250" y="310" width="500" height="30" fill="#1F4E79"/>
+  <text x="500" y="330" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">AGENT PROVISIONING</text>
+  <text x="500" y="357" text-anchor="middle" font-size="12.5" font-family="Consolas, 'Courier New', monospace" fill="#1F4E79" font-weight="bold">C:\ProgramData\WazuhUSbSysc</text>
+  <text x="500" y="378" text-anchor="middle" font-size="12" fill="#333333">• instance_cache — known device diff state</text>
+  <text x="500" y="396" text-anchor="middle" font-size="12" fill="#333333">• usb-sync log — audit trail</text>
+  <text x="500" y="414" text-anchor="middle" font-size="12" fill="#333333">• local copy of hybrid_sync_usb.ps1</text>
+  <text x="500" y="435" text-anchor="middle" font-size="11" font-style="italic" fill="#666666">(runs independently of manager connectivity)</text>
+
+  <!-- Arrow C -> D -->
+  <line x1="500" y1="450" x2="500" y2="477" stroke="#555555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="515" y="468" font-size="11.5" font-style="italic" fill="#666666">registers 2 Scheduled Tasks</text>
+
+  <!-- Box D1: Whitelist Sync Task -->
+  <rect x="120" y="480" width="340" height="90" fill="#FFF3E0" stroke="#B36B00" stroke-width="1.5"/>
+  <rect x="120" y="480" width="340" height="28" fill="#B36B00"/>
+  <text x="290" y="499" text-anchor="middle" font-size="13" font-weight="bold" fill="#FFFFFF">WHITELIST SYNC TASK</text>
+  <text x="290" y="524" text-anchor="middle" font-size="11.5" fill="#333333">Every 5 minutes</text>
+  <text x="290" y="541" text-anchor="middle" font-size="11.5" fill="#333333">Reads usb-whitelist.txt</text>
+  <text x="290" y="558" text-anchor="middle" font-size="11.5" fill="#333333">→ writes registry value</text>
+
+  <!-- Box D2: Enforcement Task -->
+  <rect x="540" y="480" width="340" height="90" fill="#FFF3E0" stroke="#B36B00" stroke-width="1.5"/>
+  <rect x="540" y="480" width="340" height="28" fill="#B36B00"/>
+  <text x="710" y="499" text-anchor="middle" font-size="13" font-weight="bold" fill="#FFFFFF">ENFORCEMENT TASK</text>
+  <text x="710" y="524" text-anchor="middle" font-size="11.5" fill="#333333">Re-applies restriction policy</text>
+  <text x="710" y="541" text-anchor="middle" font-size="11.5" fill="#333333">using current registry</text>
+  <text x="710" y="558" text-anchor="middle" font-size="11.5" fill="#333333">whitelist value</text>
+
+  <!-- Arrows D1,D2 -> E -->
+  <line x1="290" y1="570" x2="480" y2="637" stroke="#555555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="710" y1="570" x2="520" y2="637" stroke="#555555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Box E: Registry enforcement -->
+  <rect x="200" y="640" width="600" height="110" fill="#DDEBF7" stroke="#1F4E79" stroke-width="1.5"/>
+  <rect x="200" y="640" width="600" height="30" fill="#1F4E79"/>
+  <text x="500" y="660" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">REGISTRY — DEVICE INSTALLATION RESTRICTION</text>
+  <text x="500" y="686" text-anchor="middle" font-size="11.5" font-family="Consolas, 'Courier New', monospace" fill="#333333">HKLM\...\DeviceInstall\Restrictions</text>
+  <text x="500" y="705" text-anchor="middle" font-size="12" font-weight="bold" fill="#333333">DenyDeviceIDs / DeviceInstallDisabled</text>
+  <text x="500" y="723" text-anchor="middle" font-size="11" font-style="italic" fill="#666666">(built from the synced whitelist)</text>
+
+  <!-- Arrow E -> Diamond -->
+  <line x1="500" y1="750" x2="500" y2="767" stroke="#555555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Decision diamond -->
+  <polygon points="500,770 670,845 500,920 330,845" fill="#F5F0FF" stroke="#5B2A86" stroke-width="1.5"/>
+  <text x="500" y="838" text-anchor="middle" font-size="12.5" fill="#333333">USB storage device attached:</text>
+  <text x="500" y="856" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#333333">ID in whitelist?</text>
+
+  <!-- Branch: Yes -> Allowed -->
+  <line x1="330" y1="845" x2="205" y2="957" stroke="#2E7D32" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="220" y="905" font-size="12" font-weight="bold" fill="#2E7D32">YES</text>
+
+  <!-- Branch: No -> Denied -->
+  <line x1="670" y1="845" x2="795" y2="957" stroke="#C62828" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="750" y="905" font-size="12" font-weight="bold" fill="#C62828">NO</text>
+
+  <!-- Allowed box -->
+  <rect x="60" y="960" width="280" height="90" fill="#E8F5E9" stroke="#2E7D32" stroke-width="1.5"/>
+  <rect x="60" y="960" width="280" height="28" fill="#2E7D32"/>
+  <text x="200" y="979" text-anchor="middle" font-size="13" font-weight="bold" fill="#FFFFFF">ALLOWED</text>
+  <text x="200" y="1005" text-anchor="middle" font-size="11.5" fill="#333333">Device installs normally</text>
+  <text x="200" y="1022" text-anchor="middle" font-size="11.5" fill="#333333">and is usable</text>
+
+  <!-- Denied box -->
+  <rect x="660" y="960" width="280" height="90" fill="#FDECEA" stroke="#C62828" stroke-width="1.5"/>
+  <rect x="660" y="960" width="280" height="28" fill="#C62828"/>
+  <text x="800" y="979" text-anchor="middle" font-size="13" font-weight="bold" fill="#FFFFFF">DENIED</text>
+  <text x="800" y="1005" text-anchor="middle" font-size="11.5" fill="#333333">Installation blocked</text>
+  <text x="800" y="1022" text-anchor="middle" font-size="11.5" fill="#333333">at the driver level</text>
+
+</svg>
