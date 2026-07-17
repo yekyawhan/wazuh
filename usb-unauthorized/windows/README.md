@@ -1,3 +1,5 @@
+![Architecture Flow](assets/flow.svg)
+
 # Wazuh USB Storage-Only Control — Windows V3
 
 Centralized, manager-pushed USB **mass-storage** control. A single `usb_whitelist.txt` on the Wazuh Manager distributes to every agent; the agent enforces it with Windows **Device Installation Restrictions**, scoped to USB storage ONLY. Keyboards, mice, cameras, Bluetooth, hubs, phones are never touched.
