@@ -25,6 +25,7 @@ wazuh/
 ├── docker/
 ├── suricata-linux/
 ├── suricata-win/
+├── suricata-win-offline/
 ├── sysmon/
 ├── wz-agent-linux/
 └── wz-agent-windows/
@@ -40,6 +41,7 @@ wazuh/
 | `docker`                  | Docker-based files and lab resources for building a **Wazuh test environment** quickly                                                               | Lab / Infrastructure |
 | `suricata-linux`          | Scripts and configuration for deploying **Suricata on Linux** and forwarding alerts into Wazuh                                                       | Linux                |
 | `suricata-win`            | Windows-focused **Suricata integration / testing** resources for Wazuh environments                                                                  | Windows              |
+| `suricata-win-offline`    | **Offline Suricata IPS build + rule distribution** — compiles Suricata with WinDivert for inline blocking, syncs rules from Wazuh manager            | Windows              |
 | `sysmon`                  | PowerShell automation for installing and configuring **Microsoft Sysmon** on Windows endpoints for richer telemetry in Wazuh                         | Windows              |
 | `wz-agent-linux`          | Wazuh agent installation and setup resources for **Linux endpoints**                                                                                 | Linux                |
 | `wz-agent-windows`        | Wazuh agent installation and setup resources for **Windows endpoints**                                                                               | Windows              |
@@ -125,6 +127,57 @@ This folder is useful for:
 * forwarding Suricata alerts into Wazuh
 * testing hybrid **host + network monitoring** on Windows
 * evaluating Suricata behavior in Windows lab environments
+
+---
+
+## `suricata-win-offline`
+
+**Offline Suricata IPS (WinDivert) build + rule distribution chain** for Windows endpoints managed by Wazuh.
+
+Unlike the MSI-based IDS deployment in `suricata-win`, this module builds **inline-blocking Suricata from source** — Npcap is passive and can never block, so real IPS on Windows requires WinDivert.
+
+What's inside:
+
+* `build-suricata-ips.ps1` — compiles Suricata + WinDivert under MSYS2, deploys to `C:\SuricataIPS`, generates the ET refresh script, registers the rule-sync task
+* `sync-ips-rules.ps1` — manager → engine rule propagation (validated, auto-rollback, restart only on content change)
+* `install-ips-sync-task.ps1` — registers sync as a SYSTEM scheduled task (every 5 min)
+* `refresh-suricata-ips-rules.ps1` — ET Open refresh (every 3 h)
+* `rules/` — AGB whitelist / blacklist / heuristics (sid 1000010+, 1000100+)
+* `README.txt` — full build doc, operating notes, log paths
+
+### Offline Install Method
+
+The whole module is designed to run from the Wazuh shared folder on the agent — **no internet needed on the agent after the manager stage**.
+
+**Manager side (once):**
+
+```bash
+# Convert to LF — Windows agent text-mode writes add CR CR LF otherwise
+sed -i 's/\r$//' /var/ossec/etc/shared/<group>/suricata-win-offline/scripts/*.ps1 \
+                   /var/ossec/etc/shared/<group>/suricata-win-offline/rules/*.rules
+
+# Fix ownership
+install -o wazuh -g wazuh -m 644 \
+  /var/ossec/etc/shared/<group>/suricata-win-offline/{scripts/*.ps1,rules/*.rules,README.txt}
+```
+
+**Agent side (elevated PowerShell):**
+
+```powershell
+cd "C:\Program Files (x86)\ossec-agent\shared\suricata-win-offline\scripts"
+.\build-suricata-ips.ps1
+.\install-ips-sync-task.ps1
+```
+
+Run `build-suricata-ips.ps1` **from that exact folder** — it enables the `-LocalRulesRepo` auto-detect so rules come from your manager rather than GitHub. Confirm this line in the output:
+
+```
+[ips-build] LocalRulesRepo auto-detected from script location: ...
+```
+
+> **Tamper Protection:** with Defender Tamper Protection ON, add `C:\msys64` and `C:\SuricataIPS` as Defender folder exclusions by hand before the build — otherwise `cargo.exe` gets quarantined mid-build.
+
+See `suricata-win-offline/README.txt` for the full architecture, log paths, troubleshooting, and the inline-blocking design notes.
 
 ---
 
@@ -270,6 +323,7 @@ To make this repository easier to use and maintain, consider adding a dedicated 
 * `docker/README.md`
 * `suricata-linux/README.md`
 * `suricata-win/README.md`
+* `suricata-win-offline/README.md`
 * `sysmon/README.md`
 * `wz-agent-linux/README.md`
 * `wz-agent-windows/README.md`
