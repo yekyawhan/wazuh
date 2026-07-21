@@ -35,8 +35,13 @@ then
     exit 1
 fi
 
-# Wazuh AR runs as user 'ossec' group 'wazuh' (UID-based, fallback root)
-if id ossec >/dev/null 2>&1
+# Wazuh 4.x → 'wazuh' user owns the agent. Older / 3.x → 'ossec'.
+# Prefer wazuh, fall back to ossec, then root.
+if id wazuh >/dev/null 2>&1
+then
+    RUN_USER="wazuh"
+    RUN_GROUP="wazuh"
+elif id ossec >/dev/null 2>&1
 then
     RUN_USER="ossec"
     RUN_GROUP="wazuh"
@@ -49,8 +54,7 @@ fi
 # Binary: root:wazuh 0750 — wazuh group can read+exec (AR execution path),
 # but manager-sync (ossec) cannot overwrite
 mkdir -p "$DEST_DIR"
-install -m 0750 -o root -g wazuh "$SOURCE_SCRIPT" "$DEST_SCRIPT" 2>/dev/null || \
-install -m 0750 -o root "$SOURCE_SCRIPT" "$DEST_SCRIPT"
+install -m 0750 -o root -g wazuh "$SOURCE_SCRIPT" "$DEST_SCRIPT"
 
 mkdir -p "$LOG_DIR"
 touch "$LOG_DIR/share-sync.log"
