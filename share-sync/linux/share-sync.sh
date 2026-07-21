@@ -83,13 +83,8 @@ do
         if [ "$COPY" = true ]
         then
 
-            if cp -f "$FILE" "$DEST_FILE"
+            if install -m 0750 -o root -g wazuh "$FILE" "$DEST_FILE"
             then
-
-                chmod 750 "$DEST_FILE"
-
-                chown root:wazuh "$DEST_FILE" 2>/dev/null
-
 
                 write_log "SYNC : $FILENAME"
 

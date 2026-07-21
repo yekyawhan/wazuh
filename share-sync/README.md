@@ -141,6 +141,13 @@ sudo chmod +x /var/ossec/etc/shared/share-sync.sh /var/ossec/etc/shared/install-
 
 Creates systemd service + timer (`wazuh-share-sync.timer`) running every 1 minute.
 
+The installer moves `share-sync.sh` to `/var/ossec/bin/` (protected from Wazuh manager sync) and runs the service as the `ossec` user with `ProtectSystem=strict`.
+
+Uninstall:
+```bash
+sudo /var/ossec/etc/shared/uninstall-share-sync.sh
+```
+
 ---
 
 # Security Design
