@@ -35,19 +35,22 @@ then
     exit 1
 fi
 
-# Wazuh runs as user 'ossec' (UID-based check, fallback to nobody)
+# Wazuh AR runs as user 'ossec' group 'wazuh' (UID-based, fallback root)
 if id ossec >/dev/null 2>&1
 then
     RUN_USER="ossec"
-    RUN_GROUP="ossec"
+    RUN_GROUP="wazuh"
 else
     RUN_USER="root"
     RUN_GROUP="root"
 fi
 
 # ----- Deploy binary -----
+# Binary: root:wazuh 0750 — wazuh group can read+exec (AR execution path),
+# but manager-sync (ossec) cannot overwrite
 mkdir -p "$DEST_DIR"
-install -m 0750 -o root -g "$RUN_GROUP" "$SOURCE_SCRIPT" "$DEST_SCRIPT"
+install -m 0750 -o root -g wazuh "$SOURCE_SCRIPT" "$DEST_SCRIPT" 2>/dev/null || \
+install -m 0750 -o root "$SOURCE_SCRIPT" "$DEST_SCRIPT"
 
 mkdir -p "$LOG_DIR"
 touch "$LOG_DIR/share-sync.log"
