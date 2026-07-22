@@ -6,10 +6,12 @@ WHITELIST="/var/ossec/etc/shared/usb_whitelist.txt"
 RULE="/etc/udev/rules.d/99-usb-block.rules"
 LOG="/var/log/wazuh-usb-sync.log"
 
-
+# Log to both local file AND syslog (for Wazuh agent pickup)
 log()
 {
-echo "$(date '+%F %T') $1" | tee -a "$LOG"
+    local msg="$(date '+%F %T') $1"
+    echo "$msg" | tee -a "$LOG"
+    logger -t wazuh-usb-sync "$1"
 }
 
 
