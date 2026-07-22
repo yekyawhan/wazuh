@@ -14,7 +14,7 @@
 
 set -e
 
-SOURCE_SCRIPT="/var/ossec/etc/shared/share-sync.sh"
+SOURCE_SCRIPT="/var/ossec/etc/shared/share-sync/share-sync.sh"
 DEST_SCRIPT="/var/ossec/bin/share-sync.sh"
 DEST_DIR="/var/ossec/bin"
 SERVICE_FILE="/etc/systemd/system/wazuh-share-sync.service"
@@ -31,7 +31,7 @@ fi
 if [ ! -f "$SOURCE_SCRIPT" ]
 then
     echo "Missing: $SOURCE_SCRIPT"
-    echo "Copy share-sync.sh to /var/ossec/etc/shared/ first."
+    echo "Copy share-sync.sh to /var/ossec/etc/shared/share-sync/ first."
     exit 1
 fi
 

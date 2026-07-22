@@ -129,23 +129,24 @@ Unregister-ScheduledTask -TaskName "Wazuh Share Sync" -Confirm:$false
 
 **Online (Direct download):**
 ```bash
-sudo curl -o /var/ossec/etc/shared/share-sync.sh https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/share-sync/linux/share-sync.sh
-sudo curl -o /var/ossec/etc/shared/install-share-sync.sh https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/share-sync/linux/install-share-sync.sh
-sudo chmod +x /var/ossec/etc/shared/share-sync.sh /var/ossec/etc/shared/install-share-sync.sh && sudo /var/ossec/etc/shared/install-share-sync.sh
+sudo curl -o /var/ossec/etc/shared/share-sync/share-sync.sh https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/share-sync/linux/share-sync.sh
+sudo curl -o /var/ossec/etc/shared/share-sync/install-share-sync.sh https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/share-sync/linux/install-share-sync.sh
+sudo curl -o /var/ossec/etc/shared/share-sync/uninstall-share-sync.sh https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/share-sync/linux/uninstall-share-sync.sh
+sudo chmod +x /var/ossec/etc/shared/share-sync/install-share-sync.sh && sudo /var/ossec/etc/shared/share-sync/install-share-sync.sh
 ```
 
 **Offline (Local files):**
 ```bash
-sudo chmod +x /var/ossec/etc/shared/share-sync.sh /var/ossec/etc/shared/install-share-sync.sh && sudo /var/ossec/etc/shared/install-share-sync.sh
+sudo chmod +x /var/ossec/etc/shared/share-sync/share-sync.sh /var/ossec/etc/shared/share-sync/install-share-sync.sh && sudo /var/ossec/etc/shared/share-sync/install-share-sync.sh
 ```
 
 Creates systemd service + timer (`wazuh-share-sync.timer`) running every 1 minute.
 
-The installer moves `share-sync.sh` to `/var/ossec/bin/` (protected from Wazuh manager sync) and runs the service as the `ossec` user with `ProtectSystem=strict`.
+The installer moves `share-sync.sh` to `/var/ossec/bin/` (protected from Wazuh manager sync) and runs the service as the `wazuh`/`ossec` user with `ProtectSystem=strict`.
 
 Uninstall:
 ```bash
-sudo /var/ossec/etc/shared/uninstall-share-sync.sh
+sudo /var/ossec/etc/shared/share-sync/uninstall-share-sync.sh
 ```
 
 ---
