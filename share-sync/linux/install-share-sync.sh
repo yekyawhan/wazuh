@@ -60,6 +60,31 @@ mkdir -p "$LOG_DIR"
 touch "$LOG_DIR/share-sync.log"
 chown "$RUN_USER:$RUN_GROUP" "$LOG_DIR/share-sync.log" 2>/dev/null || true
 
+# ----- Enable Wazuh remote commands (idempotent) -----
+INTERNAL_OPTS="/var/ossec/etc/local_internal_options.conf"
+CHANGED=0
+
+mkdir -p "$(dirname "$INTERNAL_OPTS")"
+touch "$INTERNAL_OPTS"
+
+grep -qE '^\s*wazuh_command\.remote_commands\s*=\s*1' "$INTERNAL_OPTS" || {
+    echo "wazuh_command.remote_commands=1" >> "$INTERNAL_OPTS"
+    echo "Enabled wazuh_command.remote_commands=1"
+    CHANGED=1
+}
+
+grep -qE '^\s*logcollector\.remote_commands\s*=\s*1' "$INTERNAL_OPTS" || {
+    echo "logcollector.remote_commands=1" >> "$INTERNAL_OPTS"
+    echo "Enabled logcollector.remote_commands=1"
+    CHANGED=1
+}
+
+if [ "$CHANGED" = 1 ]
+then
+    echo "Restarting Wazuh (remote command config changed)..."
+    systemctl restart wazuh-agent 2>/dev/null || systemctl restart wazuh-manager 2>/dev/null || true
+fi
+
 # ----- Create service -----
 echo "Creating systemd service..."
 cat > "$SERVICE_FILE" <<EOF
