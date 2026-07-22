@@ -5,6 +5,26 @@ Self-contained Suricata deployment for Windows with Wazuh SIEM integration, cust
 
 Windows စက်များတွင် Suricata ကို Wazuh SIEM နှင့် ချိတ်ဆက်ပြီး whitelist/blacklist နှင့် auto-kill Active Response အပါအဝင် အလိုအလျောက် deploy လုပ်ပေးသော script များ ဖြစ်ပါသည်။
 
+## Overview
+
+Suricata ကို Windows host ပေါ်မှာ run ရင် true inline IPS mode (NFQUEUE) ကို support မလုပ်ပါ — NFQUEUE က Linux netfilter feature ဖြစ်ပါတယ်။ Windows ပေါ်မှာ Npcap capture based IDS mode (passive monitoring) အနေနဲ့သာ stable ဖြစ်ပါတယ်။ True inline blocking လိုချင်ရင် Ubuntu VM ပေါ်မှာ Suricata IPS run ခြင်းက ပိုကောင်းတဲ့ architecture ဖြစ်ပါတယ်။
+
+### Intel CPU Generation Comparison Table
+
+| Intel Generation | Example CPU | Suitability |
+| --- | --- | --- |
+| 6th-7th Gen (Skylake/Kaby Lake) | i5-6500, i7-7700 | Minimum viable — AVX2 ရှိပေမယ့် core နည်းလို့ heavy ruleset မှာ packet drop ဖြစ်နိုင် |
+| 8th-9th Gen (Coffee Lake) | i5-8400, i7-9700 | Good baseline — 6 cores+, home lab traffic (<1Gbps) အတွက် လုံလောက် |
+| 10th-11th Gen (Comet/Rocket Lake) | i5-10400, i7-11700 | Recommended — AVX2 + clock speed ပိုမြန်၊ Hyperscan matching ပိုမြန် |
+| 12th-14th Gen (Alder/Raptor Lake) | i5-12400, i7-13700 | Best — hybrid P/E-core, worker threads ကို P-core pin လုပ်ရင် IPS latency အနည်းဆုံး |
+
+### Key Considerations
+
+- **Core count:** 4 cores အနည်းဆုံး၊ IPS inline mode အတွက် 6-8 cores ပိုကောင်း
+- **AVX2/AVX-512:** Hyperscan pattern matching engine ကို hardware accelerate လုပ်ပေး
+- **Clock speed vs core count:** inline IPS latency-sensitive ဖြစ်လို့ single-thread performance ကို ဦးစားပေးသင့်
+- **NIC-CPU affinity:** af-packet mode RSS mapping အတွက် NIC driver support လိုအပ်
+
 ![Architecture](architecture.png)
 
 ---
