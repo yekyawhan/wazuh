@@ -35,20 +35,11 @@ then
     exit 1
 fi
 
-# Wazuh 4.x → 'wazuh' user owns the agent. Older / 3.x → 'ossec'.
-# Prefer wazuh, fall back to ossec, then root.
-if id wazuh >/dev/null 2>&1
-then
-    RUN_USER="wazuh"
-    RUN_GROUP="wazuh"
-elif id ossec >/dev/null 2>&1
-then
-    RUN_USER="ossec"
-    RUN_GROUP="wazuh"
-else
-    RUN_USER="root"
-    RUN_GROUP="root"
-fi
+# Service runs as root — the 'wazuh' account has /sbin/nologin, so a
+# systemd User=wazuh unit fails with 203/EXEC. Root is also required to
+# write root:wazuh files into active-response/bin/.
+RUN_USER="root"
+RUN_GROUP="root"
 
 # ----- Deploy binary -----
 # Binary: root:wazuh 0750 — wazuh group can read+exec (AR execution path),
@@ -93,8 +84,6 @@ Description=Wazuh Share Sync
 
 [Service]
 Type=oneshot
-User=$RUN_USER
-Group=$RUN_GROUP
 ExecStart=$DEST_SCRIPT
 StandardOutput=append:$LOG_DIR/share-sync.log
 StandardError=append:$LOG_DIR/share-sync.log
