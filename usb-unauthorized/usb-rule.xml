@@ -11,28 +11,35 @@
 <!--   - Linux blocks a USB device (udev deny log line)                        -->
 <!--   - repeated block attempts from one host (high risk)                     -->
 
+<!-- Wazuh custom rules: USB device control (Linux + Windows) -->
+<!-- Deploy to manager: /var/ossec/etc/rules/Custom_USB.xml then restart wazuh-manager -->
+
 <group name="usb,device-control,">
 
-  <!-- sync ran successfully on an agent (audit) -->
-  <rule id="100030" level="3">
+  <!-- sync ran successfully on an agent -->
+  <rule id="100030" level="5">
     <match>hybrid_sync_usb</match>
     <description>USB whitelist sync ran on agent.</description>
-    <group>usb_sync,</group>
+    <group>usb,</group>
   </rule>
 
-  <!-- Windows: GPO/Device-Install policy blocked a device (Event ID 219) -->
+
+    <!-- Linux:USB blocked detection -->
+   <rule id="100031" level="7">
+    <program_name>usb-block</program_name>
+    <match>DENIED unauthorized USB</match>
+    <description>Unauthorized USB device blocked by OS policy (Linux).</description>
+    <group>
+    usb_blocked,device_control,</group>
+</rule>
+
+
+  <!-- Windows: GPO blocked a device install (needs the Kernel-PnP localfile) -->
   <rule id="100032" level="8">
     <if_group>windows</if_group>
-    <field name="win.system.eventID">^219$</field>
+    <field name="win.system.eventID">^420$</field>
+    <field name="win.eventdata.classGuid" type="pcre2">(?i)36fc9e60-c465-11cf-8056-444553540000</field>
     <description>Unauthorized USB device blocked by OS policy (Windows).</description>
-    <group>usb_blocked,pci_dss_10.2.4,</group>
-  </rule>
-
-  <!-- Linux: udev blocked a device (matches the logger line the script emits) -->
-  <rule id="100031" level="8">
-    <decoded_as>syslog</decoded_as>
-    <match>usb-block: DENIED</match>
-    <description>Unauthorized USB device blocked by OS policy (Linux).</description>
     <group>usb_blocked,</group>
   </rule>
 
@@ -43,4 +50,11 @@
     <group>usb_blocked,pci_dss_10.2.4,</group>
   </rule>
 
+</group>
+
+<group name="admin_command,">
+  <rule id="100040" level="5">
+    <match>cybersecurity patch deployment:</match>
+    <description>SOC triggered .ps1 via Active Response.</description>
+  </rule>
 </group>

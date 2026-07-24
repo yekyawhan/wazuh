@@ -25,6 +25,10 @@ Or from the manager's shared folder (already synced to agent):
 ```bash
 sudo /var/ossec/etc/shared/Linux-Client/install_usb_sync_linux.sh
 ```
+## install from agent offline
+```
+sudo chmod +x /var/ossec/etc/shared/hybrid_sync_usb/hybrid_sync_usb_linux_v2.sh /var/ossec/etc/shared/hybrid_sync_usb/install_usb_sync_linux.sh && sudo /var/ossec/etc/shared/hybrid_sync_usb/install_usb_sync_linux.sh 
+```
 
 The installer:
 1. Copies `hybrid_sync_usb_linux_v2.sh` → `/usr/local/bin/hybrid_sync_usb_linux_v2.sh` (chmod +x)
@@ -78,3 +82,8 @@ systemctl status wazuh-usb-sync.service
 ## Centralization
 
 Whitelist lives on Manager at `/var/ossec/etc/shared/Linux-Client/usb_whitelist.txt`. Pushed to agents via Wazuh shared config (`agent.conf` shared group). Agent's `systemd.path` watches the local copy → auto-sync on push.
+
+## Test Logger 
+```
+logger -t usb-block "DENIED unauthorized USB storage kernel=test vendor=0781 product=556b"
+```

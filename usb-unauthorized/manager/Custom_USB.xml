@@ -10,10 +10,15 @@
     <group>usb,</group>
   </rule>
 
-  <!-- Linux: udev blocked a device (matches the logger line the udev rule emits) -->
+  <!-- Linux: udev blocked a device -->
+  <!-- Matches both formats:
+       syslog:   "usb-block: DENIED unauthorized USB storage ..."
+       journald: "usb-block[12345]: DENIED unauthorized USB storage ..."
+  -->
   <rule id="100031" level="8">
-    <match>usb-block: DENIED</match>
-    <description>Unauthorized USB device blocked by OS policy (Linux).</description>
+    <match>usb-block</match>
+    <regex>DENIED unauthorized USB storage kernel=(\S+) vendor=(\S+) product=(\S+)</regex>
+    <description>Unauthorized USB blocked (Linux): vendor=$(vendor) product=$(product) kernel=$(kernel)</description>
     <group>usb_blocked,</group>
   </rule>
 
