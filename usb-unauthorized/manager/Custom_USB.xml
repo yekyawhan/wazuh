@@ -1,0 +1,43 @@
+<!-- Wazuh custom rules: USB device control (Linux + Windows) -->
+<!-- Deploy to manager: /var/ossec/etc/rules/Custom_USB.xml then restart wazuh-manager -->
+
+<group name="usb,device-control,">
+
+  <!-- sync ran successfully on an agent -->
+  <rule id="100030" level="5">
+    <match>hybrid_sync_usb</match>
+    <description>USB whitelist sync ran on agent.</description>
+    <group>usb,</group>
+  </rule>
+
+  <!-- Linux: udev blocked a device (matches the logger line the udev rule emits) -->
+  <rule id="100031" level="8">
+    <match>usb-block: DENIED</match>
+    <description>Unauthorized USB device blocked by OS policy (Linux).</description>
+    <group>usb_blocked,</group>
+  </rule>
+
+  <!-- Windows: GPO blocked a device install (needs the Kernel-PnP localfile) -->
+  <rule id="100032" level="8">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^420$</field>
+    <field name="win.eventdata.classGuid" type="pcre2">(?i)36fc9e60-c465-11cf-8056-444553540000</field>
+    <description>Unauthorized USB device blocked by OS policy (Windows).</description>
+    <group>usb_blocked,</group>
+  </rule>
+
+  <!-- repeated attempts = higher severity -->
+  <rule id="100035" level="12" frequency="5" timeframe="60">
+    <if_matched_group>usb_blocked</if_matched_group>
+    <description>Repeated unauthorized USB attempts on one host (high risk).</description>
+    <group>usb_blocked,pci_dss_10.2.4,</group>
+  </rule>
+
+</group>
+
+<group name="admin_command,">
+  <rule id="100040" level="5">
+    <match>cybersecurity patch deployment:</match>
+    <description>SOC triggered .ps1 via Active Response.</description>
+  </rule>
+</group>
