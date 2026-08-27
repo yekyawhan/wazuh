@@ -1,0 +1,7 @@
+[Unit]
+Description=Suricata health monitor (one-shot)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/suricata-health-monitor.sh >> /var/log/suricata/health.json

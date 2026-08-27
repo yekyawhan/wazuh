@@ -1,0 +1,6 @@
+[Unit]
+Description=Refresh Suricata ruleset (with validation + rollback)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/refresh-suricata-rules.sh

@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh Suricata ET ruleset every 6 hours
+
+[Timer]
+OnBootSec=300
+OnUnitActiveSec=21600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

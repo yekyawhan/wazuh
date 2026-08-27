@@ -1,0 +1,33 @@
+<!--
+  suricata-decoder.xml
+  Suricata EVE JSON decoder for Wazuh manager.
+  Drop into /var/ossec/etc/decoders/ then `systemctl restart wazuh-manager`.
+
+  The agent ships eve.json via <localfile><log_format>json</log_format>.
+  Wazuh auto-strips JSON into fields: data.alert.signature_id, .signature,
+  .severity, .src_ip, .dest_ip, .proto, .app_proto, etc.
+-->
+<decoder name="suricata-eve">
+  <program_name>suricata</program_name>
+</decoder>
+
+<decoder name="suricata-alert">
+  <parent>suricata-eve</parent>
+  <json>
+    <field name="data.alert.signature">alert.signature</field>
+    <field name="data.alert.signature_id">alert.signature_id</field>
+    <field name="data.alert.rev">alert.rev</field>
+    <field name="data.alert.severity">alert.severity</field>
+    <field name="data.alert.category">alert.category</field>
+    <field name="data.alert.action">alert.action</field>
+    <field name="src_ip">src_ip</field>
+    <field name="src_port">src_port</field>
+    <field name="dest_ip">dest_ip</field>
+    <field name="dest_port">dest_port</field>
+    <field name="proto">proto</field>
+    <field name="app_proto">app_proto</field>
+    <field name="flow_id">flow_id</field>
+    <field name="in_iface">in_iface</field>
+    <field name="event_type">event_type</field>
+ </json>
+</decoder>

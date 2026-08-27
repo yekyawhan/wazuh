@@ -1,0 +1,21 @@
+/var/log/suricata/eve.json {
+    rotate 7
+    daily
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    postrotate
+        /bin/systemctl kill -s USR2 suricata-ips.service 2>/dev/null || \
+        /bin/systemctl kill -s USR2 suricata.service 2>/dev/null || true
+    endscript
+}
+
+/var/log/suricata/health.json {
+    rotate 4
+    weekly
+    missingok
+    notifempty
+    compress
+}

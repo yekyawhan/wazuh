@@ -1,0 +1,78 @@
+<!--
+  suricata-rules.xml
+  Wazuh rules for Suricata EVE JSON alerts.
+  Drop into /var/ossec/etc/rules/ then restart the manager.
+  Sid range: 100100 - 100199 (kept clear for new suricata rules).
+-->
+<group name="suricata,">
+
+  <!-- Catch-all for any Suricata event -->
+  <rule id="100100" level="0">
+    <decoded_as>suricata-eve</decoded_as>
+    <description>Suricata: $(event_type) from $(src_ip) to $(dest_ip</description>
+ </rule>
+
+  <!-- High severity Suricata signature (1 = highest) -->
+  <rule id="100110" level="12">
+    <if_sid>100100</if_sid>
+    <field name="event_type">alert</field>
+    <field name="data.alert.severity">1</field>
+    <description>Suricata CRITICAL [$(data.alert.signature_id)] $(data.alert.signature) — $(src_ip):$(src_port) -> $(dest_ip):$(dest_port)/$(app_proto</description>
+    <group>attack,ids,</group>
+ </rule>
+
+  <!-- Medium severity -->
+  <rule id="100111" level="9">
+    <if_sid>100100</if_sid>
+    <field name="event_type">alert</field>
+    <field name="data.alert.severity">2</field>
+    <description>Suricata HIGH [$(data.alert.signature_id)] $(data.alert.signature) — $(src_ip) -> $(dest_ip</description>
+    <group>attack,ids,</group>
+ </rule>
+
+  <!-- Low severity -->
+  <rule id="100112" level="5">
+    <if_sid>100100</if_sid>
+    <field name="event_type">alert</field>
+    <description>Suricata ALERT [$(data.alert.signature_id)] $(data.alert.signature) — severity $(data.alert.severity</description>
+    <group>attack,ids,</group>
+ </rule>
+
+  <!-- IPS drop / reject action -->
+  <rule id="100120" level="10">
+    <if_sid>100112,100111,100110</if_sid>
+    <field name="data.alert.action">blocked|dropped|blocked|reject</field>
+    <description>Suricata IPS BLOCKED $(src_ip) -> $(dest_ip):$(dest_port) by $(data.alert.signature</description>
+    <group>attack,ids,ips,</group>
+ </rule>
+
+  <!-- Anomaly engine -->
+  <rule id="100130" level="8">
+    <if_sid>100100</if_sid>
+    <field name="event_type">anomaly</field>
+    <description>Suricata ANOMALY: $(data.alert.signature) from $(src_ip</description>
+    <group>ids,anomaly,</group>
+ </rule>
+
+  <!-- Heartbeat / stats — informational -->
+  <rule id="100140" level="3">
+    <if_sid>100100</if_sid>
+    <field name="event_type">stats</field>
+    <description>Suricata stats snapshot</description>
+    <options>no_full_log</options>
+ </rule>
+
+  <!-- Engine health alert -->
+  <rule id="100150" level="0">
+    <if_sid>100100</if_sid>
+    <field name="event_type">engine</field>
+    <description>Suricata engine event: $(data.alert.signature</description>
+ </rule>
+
+  <!-- Catch unrecognized event types so they show in the dashboard -->
+  <rule id="100199" level="3">
+    <if_sid>100100</if_sid>
+    <description>Suricata unclassified event: $(event_type</description>
+ </rule>
+
+</group>
