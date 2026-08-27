@@ -30,7 +30,9 @@ cp -r "${RULESET_DIR}" "${BACKUP_DIR}/rules-${ts}" 2>/dev/null || true
 ls -dt "${BACKUP_DIR}"/rules-* 2>/dev/null | tail -n +$((MAX_BACKUPS+1)) | xargs -r rm -rf
 
 echo "[+] Validating Suricata config + rules..."
-if ! suricata -T -c "${CONFIG_DIR}/suricata.yaml" -q 2>&1 | tee /tmp/suricata-validate.log; then
+# -T validates config + loaded rulesets. Must NOT pass -q (inline queue) here:
+# -q requires a queue id and is invalid in test mode, causing a spurious failure.
+if ! suricata -T -c "${CONFIG_DIR}/suricata.yaml" 2>&1 | tee /tmp/suricata-validate.log; then
     echo "[ERROR] Validation failed. Rolling back to ${BACKUP_DIR}/rules-${ts}/"
     rm -rf "${RULESET_DIR}"
     mv "${BACKUP_DIR}/rules-${ts}" "${RULESET_DIR}"

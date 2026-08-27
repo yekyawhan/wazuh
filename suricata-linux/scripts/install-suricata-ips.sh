@@ -164,10 +164,11 @@ Type=simple
 ExecStartPre=/bin/bash -c '/bin/rm -f /run/${NAME}.pid; /sbin/iptables -w -N SURICATA_IPS 2>/dev/null; /sbin/iptables -w -F SURICATA_IPS; /sbin/iptables -w -A SURICATA_IPS -j NFQUEUE --queue-num ${QUEUE_NUM}; /sbin/iptables -w -A SURICATA_IPS -j DROP'
 ExecStart=/usr/bin/suricata -c ${CONFIG_DIR}/suricata.yaml -q ${QUEUE_NUM}
 ExecStopPost=/sbin/iptables -w -F SURICATA_IPS
-ExecStopPost=/sbin/iptables -w -F SURICATA_IPS
 Restart=always
 RestartSec=3
-WatchdogSec=30
+# No WatchdogSec: Suricata 8 inline startup exceeds the default 30s notify
+# window and systemd would SIGABRT it. Suricata manages its own liveness.
+TimeoutStartSec=120
 LimitNOFILE=65535
 
 [Install]
