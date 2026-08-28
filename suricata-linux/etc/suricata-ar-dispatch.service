@@ -1,0 +1,21 @@
+[Unit]
+Description=Suricata auto-block dispatcher (bruteforce / C2 / recon)
+Documentation=man:suricata(1)
+After=suricata-ips.service
+Wants=suricata-ips.service
+
+[Service]
+Type=simple
+# Run as root so we can manipulate iptables. Drops privileges not appropriate
+# here -- the ip-block script needs NET_ADMIN.
+ExecStart=/usr/local/bin/suricata-ar-dispatch.sh
+Restart=always
+RestartSec=5
+# Overridable via drop-in:
+#   /etc/systemd/system/suricata-ar-dispatch.service.d/override.conf
+Environment=EVE_LOG=/var/log/suricata/eve.json
+Environment=AR_BIN=/usr/local/bin/suricata-ip-block.sh
+Environment=BLOCK_TIMEOUT=3600
+
+[Install]
+WantedBy=multi-user.target

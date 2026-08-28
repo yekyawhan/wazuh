@@ -75,4 +75,35 @@
     <description>Suricata unclassified event: $(event_type</description>
  </rule>
 
+  <!-- ============================================================
+       AUTO-BLOCK TIERS (agent-side dispatch reads these groups)
+       The agent dispatcher (suricata-ar-dispatch.sh) watches eve.json
+       and blocks src_ip when an alert carries one of these groups.
+       No manager-side active response required.
+       ============================================================ -->
+
+  <!-- Brute-force / auth attacks: SSH, RDP, SMB, FTP, web login -->
+  <rule id="100160" level="10">
+    <if_sid>100112,100111,100110</if_sid>
+    <match>brute|bruteforce|dictionary|repeated auth|login attempt|password guessing|ET SCAN</match>
+    <description>Suricata BRUTEFORCE [$(data.alert.signature_id)] $(data.alert.signature) from $(src_ip) -> $(dest_ip):$(dest_port)</description>
+    <group>attack,bruteforce,autoblock,</group>
+ </rule>
+
+  <!-- C2 / beaconing / known-bad callback -->
+  <rule id="100161" level="12">
+    <if_sid>100112,100111,100110</if_sid>
+    <match>C2|command and control|beacon|callback|cobalt strike|meterpreter|reverse shell|dnscat|empire|malware</match>
+    <description>Suricata C2 [$(data.alert.signature_id)] $(data.alert.signature) from $(src_ip) -> $(dest_ip):$(dest_port)</description>
+    <group>attack,c2,autoblock,</group>
+ </rule>
+
+  <!-- Scanning / recon that precedes attack -->
+  <rule id="100162" level="8">
+    <if_sid>100112,100111,100110</if_sid>
+    <match>scan|recon|port scan|ET SCAN|suspicious connection|possible exploit</match>
+    <description>Suricata SCAN/RECON [$(data.alert.signature_id)] $(data.alert.signature) from $(src_ip)</description>
+    <group>recon,scan,autoblock,</group>
+ </rule>
+
 </group>

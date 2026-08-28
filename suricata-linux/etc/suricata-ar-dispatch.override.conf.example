@@ -1,0 +1,16 @@
+# Example drop-in for suricata-ar-dispatch.service
+# Place at: /etc/systemd/system/suricata-ar-dispatch.service.d/override.conf
+# then: systemctl daemon-reload && systemctl restart suricata-ar-dispatch.service
+
+[Service]
+# Block duration in seconds (default 3600 = 1h)
+Environment=BLOCK_TIMEOUT=3600
+
+# CIDRs that must NEVER be auto-blocked (space-separated).
+# Default already covers RFC1918 + loopback + link-local; extend here.
+# Quote the whole value so systemd does not choke on the "/" in CIDRs.
+Environment="WHITELIST=127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16"
+
+# Optional: point at a different eve.json or block script
+# Environment=EVE_LOG=/var/log/suricata/eve.json
+# Environment=AR_BIN=/usr/local/bin/suricata-ip-block.sh

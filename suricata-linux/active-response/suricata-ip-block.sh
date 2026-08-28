@@ -26,6 +26,7 @@ ACTION="${AR_ACTION:-add}"
 
 ensure_chain() { $IPT -w -N "$CHAIN" 2>/dev/null || true; }
 del_expired() {
+    [ -f /tmp/suricata-ar-blocklist ] || return 0
     while read -r ts ip; do
         if [ -n "${ts:-}" ] && [ "$ts" -lt "$(date +%s)" ]; then
             $IPT -w -D "$CHAIN" -s "$ip" -j DROP 2>/dev/null || true
