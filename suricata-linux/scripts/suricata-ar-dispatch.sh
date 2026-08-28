@@ -59,8 +59,10 @@ block() {
         return
     fi
     echo "[dispatch] BLOCK $ip ($why)"
-    AR_TIMEOUT="$BLOCK_TIMEOUT" AR_ACTION=add \
-        printf '{"src_ip":"%s","reason":"%s"}' "$ip" "$why" | "$AR_BIN"
+    # Env vars must be set on the AR_BIN invocation (right side of pipe),
+    # not on printf — otherwise suricata-ip-block.sh never sees them.
+    printf '{"src_ip":"%s","reason":"%s"}' "$ip" "$why" | \
+        AR_TIMEOUT="$BLOCK_TIMEOUT" AR_ACTION=add "$AR_BIN"
 }
 
 echo "[dispatch] watching $EVE_LOG"

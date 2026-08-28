@@ -4,11 +4,12 @@
   Drop into /var/ossec/etc/decoders/ then `systemctl restart wazuh-manager`.
 
   The agent ships eve.json via <localfile><log_format>json</log_format>.
-  Wazuh auto-strips JSON into fields: data.alert.signature_id, .signature,
-  .severity, .src_ip, .dest_ip, .proto, .app_proto, etc.
+  eve.json is PURE JSON (no syslog program_name prefix), so the parent decoder
+  must match on the "event_type" key via <prematch>, NOT <program_name>.
+  The child decoder then maps JSON paths to the field names the rules expect.
 -->
 <decoder name="suricata-eve">
-  <program_name>suricata</program_name>
+  <prematch>"event_type"</prematch>
 </decoder>
 
 <decoder name="suricata-alert">
@@ -29,5 +30,5 @@
     <field name="flow_id">flow_id</field>
     <field name="in_iface">in_iface</field>
     <field name="event_type">event_type</field>
- </json>
+  </json>
 </decoder>

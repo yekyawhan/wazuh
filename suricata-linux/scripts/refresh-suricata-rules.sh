@@ -40,10 +40,12 @@ if ! suricata -T -c "${CONFIG_DIR}/suricata.yaml" 2>&1 | tee /tmp/suricata-valid
 fi
 
 echo "[+] Reloading Suricata..."
+# Suricata reloads rules via USR2 signal. `systemctl reload` would fail
+# because the unit has no ExecReload= defined.
 if systemctl is-active --quiet suricata-ips; then
-    systemctl reload suricata-ips
+    systemctl kill -s USR2 suricata-ips.service
 elif systemctl is-active --quiet suricata; then
-    systemctl reload suricata
+    systemctl kill -s USR2 suricata.service
 else
     echo "[WARN] Suricata service not found; restart manually."
 fi

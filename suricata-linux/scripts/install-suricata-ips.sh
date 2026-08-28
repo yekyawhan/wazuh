@@ -48,6 +48,7 @@ apt-get install -y --no-install-recommends \
     iptables \
     iproute2 \
     jq \
+    python3 \
     ca-certificates
 # Note: suricata 8.x ships suricata-update inside the main package,
 # so it is NOT listed here (would cause a dpkg file-conflict on .deb overlap).

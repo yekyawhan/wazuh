@@ -68,8 +68,14 @@ if [ -n "${disk_pct:-}" ] && [ "${disk_pct:-0}" -ge "${DISK_WARN_PCT}" ]; then
 fi
 
 # --- emit JSON for Wazuh localfile ---
+# Build the messages array with proper comma separation (printf '"%s"' alone
+# concatenates without commas when there are multiple items).
+msgs_json=""
+for m in "${messages[@]}"; do
+    [ -n "$msgs_json" ] && msgs_json+=","
+    msgs_json+="\"$m\""
+done
 printf '{"suricata_health":{"agent":"%s","status":"%s","queue":%s,"messages":[%s],"ts":%s}}\n' \
-    "$AGENT_NAME" "$status" "$QUEUE_NUM" \
-    "$(IFS=,; printf '"%s"' "${messages[@]}")" "$NOW"
+    "$AGENT_NAME" "$status" "$QUEUE_NUM" "$msgs_json" "$NOW"
 
 exit 0
