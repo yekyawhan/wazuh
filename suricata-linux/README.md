@@ -1,27 +1,50 @@
-# Suricata Inline IPS for Linux (Wazuh sensor)
+# Suricata Inline IPS / IDS for Linux (Wazuh sensor)
 
-Linux endpoint တစ်ခုပေါ်မှာ **Suricata IPS** က inline mode-နဲ့ အလုပ်လုပ်စေဖို့ ရည်ရွယ်တဲ့ production-ready pipeline ပါ။
-NFQUEUE verdict၊ EVE-JSON → Wazuh၊ auto-block active response၊ self-healing rule refresh စတာတွေ ပါဝင်ပါတယ်။
-
-`suricata-win-offline/` (Windows Suricata + WinDivert) ရဲ့ Linux ဗားရှင်းပါ။
+Linux endpoint တစ်ခုပေါ်မှာ **Suricata IPS** (inline) သို့မဟုတ် **IDS** (passive) mode-နဲ့ အလုပ်လုပ်စေဖို့ ရည်ရွယ်တဲ့ production-ready pipeline ပါ။
+NFQUEUE verdict (IPS) / af-packet passive (IDS), EVE-JSON → Wazuh, auto-block active response, self-healing rule refresh စတာတွေ ပါဝင်ပါတယ်။
 
 ---
 
-## မိတ်ဆက်
+## Mode ရွေးချယ်ခြင်း
 
-ဒီ project က Linux server/tamp မှာ Suricata ကို **inline IPS** (packet accept/drop လုပ်နိုင်တယ်) အဖြစ် ထားရှိပြီး
-Wazuh agent နဲ့ ချိတ်ထားကာ alert တွေကို SIEM သို့ ပို့ပြဖို့ ရည်ရွယ်ပါတယ်။
+| Mode | Script | ဘယ်မှာသုံးမလဲ | Traffic blocking |
+|---|---|---|---|
+| **IPS (inline)** | `install-suricata-ips.sh` | Cloud compute/mgmt servers | ✅ NFQUEUE drop (fail-closed) |
+| **IDS (passive)** | `install-suricata-ids.sh` | PVE hypervisors, critical infra | ❌ မရှိ — monitor only |
 
-| Capability | ဘယ်လိုအလုပ်လုပ်လဲ |
-|---|---|
-| **Inline IPS (NFQUEUE)** | `iptables` chain → NFQUEUE 0 → Suricata packet ကို accept/drop裁定 |
-| **Fail-closed** | Suricata engine သေရင် traffic အားလုံး DROP (bypass မခံရဘူး) |
-| **EVE JSON → Wazuh** | `/var/log/suricata/eve.json` ကို `log_format=json` နဲ့ Wazuh agent ပို့သည် |
-| **Rich rules** | severity tier ၃ ဆင့်၊ IPS drop rule၊ anomaly detection (sid 100100-100199) |
-| **Auto-block BRUTEFORCE/C2** | agent-side dispatcher က eve.json ကို monitor ပြီး ဖမ်းမိရင် iptables-နဲ့ ခုန်ထည့်သည် |
-| **Health watchdog** | 5 မိနစ်တစ်ကြိမ် health JSON ထုတ်၊ Wazuh dashboard မှာ မြင်နိုင် |
-| **Rule refresh** | 6 နာရီတစ်ကြိတ် ET Open ruleset pull + validate + auto-rollback |
-| **Log rotation** | daily eve.json rotate + USR2 reload |
+> ⚠️ **PVE hypervisor မှာ IPS မသွင်းပါနဲ့** — fail-closed က VM traffic အားလုံး drop နိုင်တယ်။ IDS-only သုံးပါ။
+
+---
+
+## Install (Agent တစ်လုံးချင်းစီမှာ)
+
+Shared folder sync ပြီးရင် agent ပေါ်မှာ file တွေ ရောက်နေမယ်:
+
+### IPS mode (Cloudcompute, Cloudmgmt servers)
+
+```bash
+sudo apt-get install -y suricata iptables iproute2 jq python3 ca-certificates
+cd /var/ossec/etc/shared/suricata-linux
+sudo chmod +x scripts/*.sh
+sudo ./scripts/install-suricata-ips.sh
+```
+
+### IDS mode (PVE hypervisors — Cloudpve01/02/03)
+
+```bash
+sudo apt-get install -y suricata jq python3 ca-certificates
+cd /var/ossec/etc/shared/suricata-linux
+sudo chmod +x scripts/*.sh
+sudo ./scripts/install-suricata-ids.sh
+```
+
+### Interface force လုပ်ချင်ရင်
+
+```bash
+# Default က auto-detect (default route interface)
+export SURICATA_IFACE=vmbr0    # PVE bridge
+sudo ./scripts/install-suricata-ids.sh
+```
 
 ---
 
@@ -30,18 +53,20 @@ Wazuh agent နဲ့ ချိတ်ထားကာ alert တွေကို SI
 ```text
 suricata-linux/
 ├── scripts/
-│   ├── install-suricata-ips.sh            # installer (idempotent)
-│   ├── uninstall-suricata-ips.sh          # uninstall
-│   ├── suricata-health-monitor.sh         # health check → /var/log/suricata/health.json
+│   ├── install-suricata-ips.sh            # IPS installer (NFQUEUE inline)
+│   ├── install-suricata-ids.sh            # IDS installer (passive af-packet)
+│   ├── uninstall-suricata-ips.sh          # IPS uninstall
+│   ├── uninstall-suricata-ids.sh          # IDS uninstall
+│   ├── suricata-health-monitor.sh         # health check → health.json
 │   ├── refresh-suricata-rules.sh          # ET ruleset update + validate + rollback
-│   └── suricata-ar-dispatch.sh            # agent-side auto-block daemon (bruteforce/C2/scanning)
+│   └── suricata-ar-dispatch.sh            # agent-side auto-block daemon (IPS only)
 ├── etc/
 │   ├── suricata-ar-dispatch.service       # dispatch daemon systemd unit
 │   ├── suricata-health.{service,timer}    # health watchdog timer
 │   ├── suricata-rules.{service,timer}     # rule refresh timer
 │   ├── suricata-logrotate                 # daily eve.json logrotate
-│   ├── suricata-decoder.xml               # Wazuh decoder (eve.json fields)
-│   └── suricata-ar-dispatch.override.conf.example # tunable override
+│   ├── suricata-decoder.xml               # Wazuh decoder (prematch-based)
+│   └── suricata-ar-dispatch.override.conf.example
 ├── rules/
 │   └── suricata-rules.xml                 # Wazuh rules (sid 100100-100199)
 └── active-response/
@@ -50,80 +75,29 @@ suricata-linux/
 
 ---
 
-## Install
+## Manager-side setup (one-time, siem2)
 
 ```bash
-sudo apt-get install -y suricata jq
-cd /path/to/suricata-linux
-sudo ./scripts/install-suricata-ips.sh
-```
-
-Installer က —
-1. Suricata + packages install
-2. NFQUEUE inline mode configure
-3. `SURICATA_IPS` iptables chain setup (fail-closed)
-4. Systemd service (auto-restart + watchdog) start
-5. `/var/log/suricata/eve.json` ကို Wazuh localfile အဖြစ် register
-
-```
-[*] Interface : eth1
-[*] NFQUEUE   : 0
-
-[OK] Suricata IPS active:
-active
--N SURICATA_IPS
--A SURICATA_IPS -j NFQUEUE --queue-num 0
--A SURICATA_IPS -j DROP
-```
-
-### Tuning
-
-```bash
-# Default interface က auto detect လုပ်တယ်။ သိသိသာသာ forced လုပ်ချင်ရင်:
-export SURICATA_IFACE=eth0
-sudo ./scripts/install-suricata-ips.sh
-
-# Queue number ပြောင်းချင်ရင်:
-export SURICATA_QUEUE=1
-sudo ./scripts/install-suricata-ips.sh
+sudo cp /var/ossec/etc/shared/default/suricata-linux/etc/suricata-decoder.xml /var/ossec/etc/decoders/
+sudo cp /var/ossec/etc/shared/default/suricata-linux/rules/suricata-rules.xml /var/ossec/etc/rules/
+sudo chown wazuh:wazuh /var/ossec/etc/decoders/suricata-decoder.xml /var/ossec/etc/rules/suricata-rules.xml
+sudo chmod 640 /var/ossec/etc/decoders/suricata-decoder.xml /var/ossec/etc/rules/suricata-rules.xml
+sudo systemctl restart wazuh-manager
 ```
 
 ---
 
-## Monitor & Maintenance
-
-Systemd timers install လုပ်ပြီးမှ —
-```bash
-sudo cp scripts/suricata-health-monitor.sh        /usr/local/bin/
-sudo cp scripts/refresh-suricata-rules.sh         /usr/local/bin/
-sudo cp etc/suricata-health.{service,timer}       /etc/systemd/system/
-sudo cp etc/suricata-rules.{service,timer}        /etc/systemd/system/
-sudo cp etc/suricata-logrotate                    /etc/logrotate.d/suricata
-sudo systemctl enable --now suricata-health.timer suricata-rules.timer
-```
-
-### Auto-block (BRUTEFORCE/C2/Scanning)
-
-Agent-side auto-block daemon က eve.json ကို watch ပြီး Bruteforce သို့မဟုတ် C2 signature တွေ့ရင် attacker IP ကို iptables-နဲ့ 1 နာရီ block လုပ်ပေးသည်။ Wazuh manager လိုအပ်ခြင်း မရှိ။
+## IPS-only: Auto-block daemon
 
 ```bash
-sudo cp scripts/suricata-ar-dispatch.sh           /usr/local/bin/
-sudo cp etc/suricata-ar-dispatch.service          /etc/systemd/system/
+sudo cp scripts/suricata-ar-dispatch.sh /usr/local/bin/
+sudo cp etc/suricata-ar-dispatch.service /etc/systemd/system/
 sudo mkdir -p /etc/systemd/system/suricata-ar-dispatch.service.d
 sudo cp etc/suricata-ar-dispatch.override.conf.example \
     /etc/systemd/system/suricata-ar-dispatch.service.d/override.conf
 sudo systemctl daemon-reload
 sudo systemctl enable --now suricata-ar-dispatch.service
 ```
-
-Override file မှာ ထိန်းညှိနိုင်သည် —
-- **BLOCK_TIMEOUT** = block ကြာချိန် (စက္ကန့်)၊ default 3600 (1 နာရီ)
-- **WHITELIST** = ဘယ် CIDR ကို block လုပ်သင့်မလဲ၊ default RFC1918 + loopback + link-local
-
-### Rule Refresh
-
-6 နာရီတစ်ကြိတ် automatically `suricata-update` နဲ့ ET Open ruleset ပို့ယူသည်။
-`suricata -T` ဖြင့် validate ပြီးမှ load — validation မအောင်ရင် ရှေ့ version သို့ auto-rollback လုပ်သည်။
 
 ---
 
@@ -140,43 +114,19 @@ Override file မှာ ထိန်းညှိနိုင်သည် —
 | 100120 | 10 | IPS blocked traffic | attack,ids,ips |
 | 100130 | 8 | Anomaly engine | ids,anomaly |
 | 100140 | 3 | Stats snapshot | info |
-| **100160** | **10** | **BRUTEFORCE detected** | **attack,bruteforce,autoblock,** |
-| **100161** | **12** | **C2/Beacon detected** | **attack,c2,autoblock,** |
-| **100162** | **8** | **Scanning/Recon** | **recon,scan,autoblock,** |
-
-### Auto-block trigger groups
-
-Dispatcher daemon က ဒီ group name တွေကို decode မှာ filter လုပ်သည် —
-- `autoblock,bruteforce` → SSH/RDP/SMB login brute force များ
-- `autoblock,c2` → Cobalt Strike, Empire, dnscat, meterpreter, reverse shell
-- `autoblock,recon` → Port scan, recon, suspicious connection
+| **100160** | **10** | **BRUTEFORCE detected** | **attack,bruteforce,autoblock** |
+| **100161** | **12** | **C2/Beacon detected** | **attack,c2,autoblock** |
+| **100162** | **8** | **Scanning/Recon** | **recon,scan,autoblock** |
 
 ---
 
 ## Verify
 
-### Service status
 ```bash
-systemctl status suricata-ips                # IPS engine
-systemctl status suricata-ar-dispatch        # auto-block daemon
-```
-
-### iptables chain
-```bash
-iptables -L SURICATA_IPS -n -v              # NFQUEUE chain
-iptables -L WAZUH_SURICATA_BLOCK -n -v      # Auto-block chain
-cat /tmp/suricata-ar-blocklist              # Blocked IPs + expiry
-```
-
-### Eve.json alerts
-```bash
+systemctl status suricata-ips     # IPS mode
+systemctl status suricata-ids     # IDS mode
 tail -f /var/log/suricata/eve.json | jq 'select(.event_type=="alert")'
-```
-
-### Health monitor output
-```bash
 sudo /usr/local/bin/suricata-health-monitor.sh
-# {"suricata_health":{"agent":"hostname","status":"ok","queue":0,"messages":[],"ts":...}}
 ```
 
 ---
@@ -184,18 +134,24 @@ sudo /usr/local/bin/suricata-health-monitor.sh
 ## Uninstall
 
 ```bash
-sudo ./scripts/uninstall-suricata-ips.sh
+sudo ./scripts/uninstall-suricata-ips.sh   # IPS
+sudo ./scripts/uninstall-suricata-ids.sh   # IDS
 ```
 
-ဒါက — suricata-ips service disable, ossec.conf restore, iptables chain flush လုပ်ပေးသည်။
-Auto-block daemon ကိုပါ delete လုပ်ချင်ရင်:
-```bash
-sudo systemctl stop suricata-ar-dispatch.service
-sudo systemctl disable suricata-ar-dispatch.service
-sudo rm /etc/systemd/system/suricata-ar-dispatch.service
-sudo rm /usr/local/bin/suricata-ar-dispatch.sh
-sudo systemctl daemon-reload
-```
+---
+
+## Fix log (2026-08-28)
+
+| # | Bug | Fix |
+|---|---|---|
+| 1 | Decoder `program_name` (eve.json = pure JSON, no syslog prefix) | `prematch` ပြောင်း |
+| 2 | Rules `$(field)` closing paren 8 နေရာ ပိတ်မထား | ပိတ်ပြီး |
+| 3 | `systemctl reload` (ExecReload မရှိ) | `kill -s USR2` |
+| 4 | ar-dispatch env vars printf ဘက်မှာ set | AR_BIN ဘက် ပြောင်း |
+| 5 | health-monitor JSON comma မပါ | loop နဲ့ build |
+| 6 | python3 dependency မထည့် | apt list ထဲ ထည့် |
+| 7 | `<json>` block invalid (analysisd CRITICAL 1202) | ဖျက်ပြီး prematch-only |
+| 8 | Rules field names `data.*` မဟုတ် | auto-parse namespace ပြောင်း |
 
 ---
 
@@ -205,7 +161,7 @@ sudo systemctl daemon-reload
 |---|---|
 | suricata-ips.service | ✅ active, NRestarts=0 |
 | NFQUEUE inline | ✅ queue bound, backlog draining |
-| Fail-closed postuer | ✅ engine crash → DROP |
+| Fail-closed posture | ✅ engine crash → DROP |
 | Auto-block (bruteforce) | ✅ tested: 203.0.113.50 blocked |
 | Auto-block (C2) | ✅ tested: 198.51.100.7 blocked |
 | Rule refresh | ✅ 6-hour timer + ET pull + validate |
