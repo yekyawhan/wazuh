@@ -4,7 +4,7 @@ Author: SOC Automation
 #>
 
 param(
-    [string]$WazuhManager = "172.25.33.50",
+    [string]$WazuhManager = "10.3.11.40",
     [string]$WazuhVersionUrl = "https://packages.wazuh.com/4.x/windows/wazuh-agent-4.14.5-1.msi",
     [switch]$ForceReinstall,
     [string]$LogFile = "$env:TEMP\wazuh-install.log"
