@@ -55,8 +55,8 @@ suricata-linux/
 ├── scripts/
 │   ├── install-suricata-ips.sh            # IPS installer (NFQUEUE inline)
 │   ├── install-suricata-ids.sh            # IDS installer (passive af-packet)
-│   ├── uninstall-suricata-ips.sh          # IPS uninstall
-│   ├── uninstall-suricata-ids.sh          # IDS uninstall
+│   ├── uninstall-suricata-all.sh          # single uninstaller: IPS + IDS + timers + helpers
+│   ├── suricata-poc.sh                    # one-shot PoC: install → traffic → detect → uninstall → clean
 │   ├── suricata-health-monitor.sh         # health check → health.json
 │   ├── refresh-suricata-rules.sh          # ET ruleset update + validate + rollback
 │   └── suricata-ar-dispatch.sh            # agent-side auto-block daemon (IPS only)
@@ -134,9 +134,27 @@ sudo /usr/local/bin/suricata-health-monitor.sh
 ## Uninstall
 
 ```bash
-sudo ./scripts/uninstall-suricata-ips.sh   # IPS
-sudo ./scripts/uninstall-suricata-ids.sh   # IDS
+sudo ./scripts/uninstall-suricata-all.sh    # removes IPS + IDS + timers + helpers (idempotent)
+sudo SURICATA_PURGE=1 ./scripts/uninstall-suricata-all.sh   # + wipe config/rules/logs/package
 ```
+
+The single uninstaller is state-aware: it cleans whichever mode(s) were installed,
+scrubs `SURICATA_IPS` iptables jumps (any interface) + persistent rules, unmask the
+stock `suricata.service` (does not re-enable it — its `eth0` default crash-loops on
+boxes named `ens*`), restores the Wazuh `ossec.conf` backup, and self-verifies with
+`[OK] CLEAN` or exit 1 listing leftovers.
+
+## Fix log (2026-09-09)
+
+| # | Bug | Fix |
+|---|---|---|
+| 1 | Installer hang at systemd unit step → box network drop, Wazuh disconnect | NFQUEUE tail `-j ACCEPT` before engine up; start service before hook |
+| 2 | Inline drops existing Wazuh agent↔manager session (`stream_midstream`) | `midstream-policy: pass-flow` (7.0.x rejects `accept-flow`) |
+| 3 | SSH/Wazuh traffic blackholed during 52k-rule load | bypass dports+sports 22,1514,1515 |
+| 4 | Interface hardcoded `eth0` (crash on `ens18`) | `SURICATA_IFACE` env → TTY picker → default-route autodetect |
+| 5 | Ubuntu stock `suricata.service` re-starts and conflicts | `systemctl mask` in installer; uninstaller unmasks |
+| 6 | Uninstallers missed timers, `/usr/local/bin` helpers, persistent rules, iface mismatch | merged into `uninstall-suricata-all.sh` with self-verify |
+| 7 | `kill -USR1` for stats kills the engine | use `stats.log`/`suricatasc`; unit sets `IgnoreSIGUSR1=yes` |
 
 ---
 

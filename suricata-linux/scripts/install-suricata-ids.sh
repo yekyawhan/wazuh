@@ -9,13 +9,10 @@
 # eve.json which Wazuh forwards to the manager. No packets are ever
 # dropped or delayed — safe for hypervisors and critical infrastructure.
 #
-# What it does:
-#   1. Installs Suricata.
-#   2. Configures af-packet passive capture on the target interface.
-#   3. EVE JSON output → /var/log/suricata/eve.json.
-#   4. Systemd unit with auto-restart.
-#   5. Wazuh localfile registration for eve.json.
-#   6. Health watchdog + rule refresh timers.
+# Interface selection (priority):
+#   1. $SURICATA_IFACE env var (fleet deploys)
+#   2. Interactive picker (TTY only, 10s timeout)
+#   3. Auto-detect via default route
 #
 # Idempotent: re-running is safe.
 # ---------------------------------------------------------------------------
@@ -23,7 +20,6 @@
 set -euo pipefail
 
 NAME="suricata-ids"
-IFACE="${SURICATA_IFACE:-$(ip -o route get 1.1.1.1 2>/dev/null | awk '{print $5; exit}')}"
 WAZUH_OSSEC="/var/ossec"
 EVE_LOG="/var/log/suricata/eve.json"
 CONFIG_DIR="/etc/suricata"
@@ -31,7 +27,26 @@ CONFIG_DIR="/etc/suricata"
 fail() { echo "[ERROR] $*" >&2; exit 1; }
 
 [ "$EUID" -eq 0 ] || fail "Run as root (sudo)."
-[ -n "$IFACE" ] || fail "No interface detected. Set SURICATA_IFACE=<iface>."
+
+# ---------------------------------------------------------------
+# 0. Interface selection: env -> interactive (TTY) -> auto-detect
+# ---------------------------------------------------------------
+AUTO_IFACE="$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')"
+AUTO_IFACE="${AUTO_IFACE:-$(ip -o route get 1.1.1.1 2>/dev/null | awk '{print $5; exit}')}"
+
+if [ -n "${SURICATA_IFACE:-}" ]; then
+    IFACE="$SURICATA_IFACE"
+elif [ -t 0 ] && [ -t 1 ]; then
+    echo "Available interfaces on $(hostname):"
+    ip -br link | awk '$1 != "lo" {printf "  [%d] %s  %s\n", ++n, $1, $2}'
+    read -r -t 10 -p "Select interface [${AUTO_IFACE:-none}] (10s): " USER_IFACE || true
+    IFACE="${USER_IFACE:-$AUTO_IFACE}"
+else
+    IFACE="$AUTO_IFACE"
+fi
+
+[ -n "$IFACE" ] || fail "No interface detected/selected. Set SURICATA_IFACE=<iface> or run from a TTY."
+ip link show "$IFACE" >/dev/null 2>&1 || fail "Interface '$IFACE' does not exist on this host."
 
 echo "=============================================="
 echo "   Suricata IDS-ONLY Installer (passive)"
@@ -56,6 +71,7 @@ apt-get install -y --no-install-recommends \
 if systemctl list-unit-files suricata.service >/dev/null 2>&1; then
     systemctl stop suricata.service 2>/dev/null || true
     systemctl disable suricata.service 2>/dev/null || true
+    systemctl mask suricata.service 2>/dev/null || true
 fi
 
 # ---------------------------------------------------------------
@@ -64,14 +80,15 @@ fi
 echo "[+] Configuring Suricata (af-packet passive on ${IFACE})..."
 cp -n "${CONFIG_DIR}/suricata.yaml" "${CONFIG_DIR}/suricata.yaml.orig" 2>/dev/null || true
 
-python3 - <<PY
-import re
+IFACE="${IFACE}" python3 - <<'PY'
+import re, os
 p = "/etc/suricata/suricata.yaml"
 s = open(p).read()
+iface = os.environ["IFACE"]
 
-# Set af-packet interface
-afp = """af-packet:
-  - interface: ${IFACE}
+# Set af-packet interface block (anchored, multiline-safe)
+afp = f"""af-packet:
+  - interface: {iface}
     threads: auto
     cluster-id: 99
     cluster-type: cluster_flow
@@ -79,10 +96,14 @@ afp = """af-packet:
     use-mmap: yes
     mmap-locked: yes
 """
-s = re.sub(r"af-packet:.*?(?=\n\S|\Z)", afp, s, flags=re.S)
+
+if re.search(r"(?m)^af-packet:", s):
+    s = re.sub(r"(?m)^af-packet:.*?(?=\n[a-zA-Z0-9_#-]+:|\Z)", afp, s, flags=re.S)
+else:
+    s = s + "\n" + afp
 
 # Ensure EVE JSON outputs to file (Wazuh reads it)
-eve_block = """  - eve-log:
+eve_block = '''  - eve-log:
       enabled: yes
       filetype: regular
       filename: eve.json
@@ -100,12 +121,30 @@ eve_block = """  - eve-log:
         - ssh
         - stats:
             totals: yes
-"""
+'''
 s = re.sub(r"  - eve-log:.*?(?=\n  - |\noutputs:|\Z)", eve_block, s, flags=re.S)
 
 open(p, "w").write(s)
-print("[+] suricata.yaml patched (IDS passive)")
+print(f"[+] suricata.yaml patched (IDS passive on {iface})")
 PY
+
+# ---------------------------------------------------------------
+# 2b. Download ruleset (ET Open) via suricata-update
+# ---------------------------------------------------------------
+echo "[+] Fetching rules via suricata-update (ET Open)..."
+suricata-update update-sources >/dev/null 2>&1 || true
+suricata-update enable-source et/open >/dev/null 2>&1 || true
+suricata-update || echo "[WARN] suricata-update failed — continuing"
+
+# ---------------------------------------------------------------
+# 2c. Validate config before starting service
+# ---------------------------------------------------------------
+echo "[+] Validating suricata.yaml + rules (suricata -T)..."
+if ! suricata -T -c "${CONFIG_DIR}/suricata.yaml" >/tmp/suricata-T-ids.log 2>&1; then
+    tail -20 /tmp/suricata-T-ids.log >&2
+    fail "Config validation FAILED. See /tmp/suricata-T-ids.log."
+fi
+echo "[OK] Config validated."
 
 # ---------------------------------------------------------------
 # 3. systemd unit
@@ -163,18 +202,20 @@ echo "[+] Installing health watchdog + rule refresh timers..."
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BASE_DIR="$(dirname "$SCRIPT_DIR")"
 
-cp "${SCRIPT_DIR}/suricata-health-monitor.sh" /usr/local/bin/
-cp "${SCRIPT_DIR}/refresh-suricata-rules.sh" /usr/local/bin/
-chmod 755 /usr/local/bin/suricata-health-monitor.sh /usr/local/bin/refresh-suricata-rules.sh
+if [ -f "${SCRIPT_DIR}/suricata-health-monitor.sh" ]; then
+    cp "${SCRIPT_DIR}/suricata-health-monitor.sh" /usr/local/bin/
+    cp "${SCRIPT_DIR}/refresh-suricata-rules.sh" /usr/local/bin/
+    chmod 755 /usr/local/bin/suricata-health-monitor.sh /usr/local/bin/refresh-suricata-rules.sh
 
-cp "${BASE_DIR}/etc/suricata-health.service" /etc/systemd/system/
-cp "${BASE_DIR}/etc/suricata-health.timer" /etc/systemd/system/
-cp "${BASE_DIR}/etc/suricata-rules.service" /etc/systemd/system/
-cp "${BASE_DIR}/etc/suricata-rules.timer" /etc/systemd/system/
-cp "${BASE_DIR}/etc/suricata-logrotate" /etc/logrotate.d/suricata
+    cp "${BASE_DIR}/etc/suricata-health.service" /etc/systemd/system/ 2>/dev/null || true
+    cp "${BASE_DIR}/etc/suricata-health.timer" /etc/systemd/system/ 2>/dev/null || true
+    cp "${BASE_DIR}/etc/suricata-rules.service" /etc/systemd/system/ 2>/dev/null || true
+    cp "${BASE_DIR}/etc/suricata-rules.timer" /etc/systemd/system/ 2>/dev/null || true
+    cp "${BASE_DIR}/etc/suricata-logrotate" /etc/logrotate.d/suricata 2>/dev/null || true
 
-systemctl daemon-reload
-systemctl enable --now suricata-health.timer suricata-rules.timer
+    systemctl daemon-reload
+    systemctl enable --now suricata-health.timer suricata-rules.timer 2>/dev/null || true
+fi
 
 sleep 2
 echo ""
