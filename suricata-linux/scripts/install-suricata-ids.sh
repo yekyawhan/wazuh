@@ -117,6 +117,7 @@ eve_block = '''  - eve-log:
         - dns:
         - tls:
             extended: yes
+            ja3-fingerprints: yes
         - flow
         - ssh
         - stats:
@@ -181,16 +182,17 @@ if [ -d "${WAZUH_OSSEC}/etc" ]; then
     if ! grep -q "suricata/eve.json" "${LOCAL}"; then
         cp "${LOCAL}" "${LOCAL}.bak.suricata-ids"
         python3 - <<PY
+import xml.etree.ElementTree as ET
 p = "${WAZUH_OSSEC}/etc/ossec.conf"
-s = open(p).read()
-block = '''  <ossec_config>
-    <localfile>
-      <log_format>json</log_format>
-      <location>/var/log/suricata/eve.json</location>
-    </localfile>'''
-s = s.replace("<ossec_config>", block, 1)
-open(p,"w").write(s)
+tree = ET.parse(p)
+root = tree.getroot()
+lf = ET.SubElement(root, 'localfile')
+ET.SubElement(lf, 'log_format').text = 'json'
+ET.SubElement(lf, 'location').text = '/var/log/suricata/eve.json'
+tree.write(p)
+print("[+] localfile injected, XML valid")
 PY
+        python3 -c "import xml.etree.ElementTree as ET; ET.parse('${WAZUH_OSSEC}/etc/ossec.conf')" || fail "ossec.conf became invalid XML — restoring backup"
         systemctl restart wazuh-agent 2>/dev/null || true
     fi
 fi

@@ -36,6 +36,9 @@ WAZUH_OSSEC="/var/ossec"
 EVE_LOG="/var/log/suricata/eve.json"
 CONFIG_DIR="/etc/suricata"
 ROLES_CONF="/etc/${NAME}.conf"
+# Trusted sources bypass NFQUEUE entirely (zero self-block + lower engine load).
+# Override: SURICATA_TRUSTED_IPS="ip1 ip2" — empty string disables.
+TRUSTED_IPS="${SURICATA_TRUSTED_IPS:-10.3.11.40 172.16.10.49 172.16.10.50 172.16.10.51 172.16.10.52 172.16.10.53}"
 
 fail() { echo "[ERROR] $*" >&2; exit 1; }
 
@@ -179,7 +182,7 @@ if re.search(r"(?m)^stream:", s):
 else:
     s = s + "\n" + stream_fix
 
-# Ensure EVE JSON outputs to file (Wazuh reads it)
+# Ensure EVE JSON outputs to file (Wazuh reads it) + JA3 fingerprinting enabled
 eve_block = '''  - eve-log:
       enabled: yes
       filetype: regular
@@ -194,6 +197,7 @@ eve_block = '''  - eve-log:
         - dns:
         - tls:
             extended: yes
+            ja3-fingerprints: yes
         - flow
         - ssh
         - stats:
@@ -241,7 +245,17 @@ echo "[+] Installing iptables SURICATA_IPS chain..."
 # Idempotent: flush+rebuild the chain
 iptables -w -F SURICATA_IPS 2>/dev/null || iptables -w -N SURICATA_IPS
 
-# 1. Management safety bypass: SSH (22) + Wazuh (1514, 1515)
+# 1. Trusted-source bypass (Tier-2 hardening 2026-09-09):
+#    management/scanner boxes never enter NFQUEUE -> zero self-block risk,
+#    fewer false positives, engine load reduced. Extend via
+#    SURICATA_TRUSTED_IPS="ip1 ip2 ...".
+for TIP in $TRUSTED_IPS; do
+    echo "$TIP" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || { echo "[WARN] invalid trusted IP '$TIP' skipped"; continue; }
+    iptables -w -A SURICATA_IPS -s "$TIP" -j ACCEPT
+    iptables -w -A SURICATA_IPS -d "$TIP" -j ACCEPT
+done
+
+# 2. Management safety bypass: SSH (22) + Wazuh (1514, 1515)
 iptables -w -A SURICATA_IPS -p tcp -m multiport --dports 22,1514,1515 -j ACCEPT
 iptables -w -A SURICATA_IPS -p tcp -m multiport --sports 22,1514,1515 -j ACCEPT
 
@@ -262,6 +276,14 @@ iptables -w -A SURICATA_IPS -j "${IPT_TAIL}"
 # 5. systemd unit (watchdog + restart)
 # ---------------------------------------------------------------
 echo "[+] Installing systemd unit..."
+# Rebuild trusted bypass as one shell fragment for ExecStartPre.
+# ponytail: string concat in bash, no arrays — fine for <=20 IPs; switch to a
+# generated drop-in unit (ExecStartPre= lines) if the list ever grows.
+EXECSTARTPRE_TRUSTED=""
+for TIP in $TRUSTED_IPS; do
+    echo "$TIP" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || continue
+    EXECSTARTPRE_TRUSTED="${EXECSTARTPRE_TRUSTED}/sbin/iptables -w -A SURICATA_IPS -s ${TIP} -j ACCEPT; /sbin/iptables -w -A SURICATA_IPS -d ${TIP} -j ACCEPT; "
+done
 cat > /etc/systemd/system/${NAME}.service <<EOF
 [Unit]
 Description=Suricata Inline IPS (NFQUEUE)
@@ -270,11 +292,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStartPre=/bin/bash -c '/bin/rm -f /run/${NAME}.pid; /sbin/iptables -w -N SURICATA_IPS 2>/dev/null; /sbin/iptables -w -F SURICATA_IPS; /sbin/iptables -w -A SURICATA_IPS -p tcp -m multiport --dports 22,1514,1515 -j ACCEPT; /sbin/iptables -w -A SURICATA_IPS -p tcp -m multiport --sports 22,1514,1515 -j ACCEPT; /sbin/iptables -w -A SURICATA_IPS -j NFQUEUE --queue-num ${QUEUE_NUM} --queue-bypass; /sbin/iptables -w -A SURICATA_IPS -j ${IPT_TAIL}'
+ExecStartPre=/bin/bash -c '/bin/rm -f /run/${NAME}.pid; /sbin/iptables -w -N SURICATA_IPS 2>/dev/null; /sbin/iptables -w -F SURICATA_IPS; ${EXECSTARTPRE_TRUSTED}/sbin/iptables -w -A SURICATA_IPS -p tcp -m multiport --dports 22,1514,1515 -j ACCEPT; /sbin/iptables -w -A SURICATA_IPS -p tcp -m multiport --sports 22,1514,1515 -j ACCEPT; /sbin/iptables -w -A SURICATA_IPS -j NFQUEUE --queue-num ${QUEUE_NUM} --queue-bypass; /sbin/iptables -w -A SURICATA_IPS -j ${IPT_TAIL}'
 ExecStart=/usr/bin/suricata -c ${CONFIG_DIR}/suricata.yaml -q ${QUEUE_NUM}
 ExecStopPost=/sbin/iptables -w -F SURICATA_IPS
 Restart=always
 RestartSec=3
+IgnoreSIGUSR1=yes
 # No WatchdogSec: Suricata 8 inline startup exceeds the default 30s notify
 # window and systemd would SIGABRT it. Suricata manages its own liveness.
 TimeoutStartSec=120
@@ -288,12 +311,16 @@ systemctl daemon-reload
 systemctl enable ${NAME} --now
 systemctl restart ${NAME}
 
-# Hook into FORWARD and INPUT only AFTER service is running
-echo "[+] Hooking SURICATA_IPS into iptables INPUT and FORWARD..."
+# Hook into INPUT, FORWARD, and OUTPUT only AFTER service is running.
+# OUTPUT matters for host-generated traffic: JA3 fingerprints are computed
+# from the CLIENT hello, which only the engine sees if outbound is hooked.
+echo "[+] Hooking SURICATA_IPS into iptables INPUT, FORWARD, OUTPUT..."
 iptables -w -D FORWARD -i "${IFACE}" -j SURICATA_IPS 2>/dev/null || true
 iptables -w -D INPUT   -i "${IFACE}" -j SURICATA_IPS 2>/dev/null || true
+iptables -w -D OUTPUT  -o "${IFACE}" -j SURICATA_IPS 2>/dev/null || true
 iptables -w -I FORWARD -i "${IFACE}" -j SURICATA_IPS
 iptables -w -I INPUT   -i "${IFACE}" -j SURICATA_IPS
+iptables -w -I OUTPUT  -o "${IFACE}" -j SURICATA_IPS
 
 # Persist (best effort)
 if command -v netfilter-persistent >/dev/null 2>&1; then
@@ -318,21 +345,22 @@ fi
 # 6. Wazuh locfile forward of eve.json
 # ---------------------------------------------------------------
 if [ -d "${WAZUH_OSSEC}/etc" ]; then
-    echo "[+] Registering Wazuh locfile for ${EVE_LOG}"
+    echo "[+] Registering Wazuh localfile for ${EVE_LOG} (XML-safe via ElementTree)"
     LOCAL="${WAZUH_OSSEC}/etc/ossec.conf"
     if ! grep -q "suricata/eve.json" "${LOCAL}"; then
         cp "${LOCAL}" "${LOCAL}.bak.suricata-ips"
         python3 - <<PY
+import xml.etree.ElementTree as ET
 p = "${WAZUH_OSSEC}/etc/ossec.conf"
-s = open(p).read()
-block = '''  <ossec_config>
-    <localfile>
-      <log_format>json</log_format>
-      <location>/var/log/suricata/eve.json</location>
-    </localfile>'''
-s = s.replace("<ossec_config>", block, 1)
-open(p,"w").write(s)
+tree = ET.parse(p)                       # fail loudly if conf already corrupt
+root = tree.getroot()
+lf = ET.SubElement(root, 'localfile')
+ET.SubElement(lf, 'log_format').text = 'json'
+ET.SubElement(lf, 'location').text = '/var/log/suricata/eve.json'
+tree.write(p)
+print("[+] localfile injected, XML valid")
 PY
+        python3 -c "import xml.etree.ElementTree as ET; ET.parse('${WAZUH_OSSEC}/etc/ossec.conf')" || fail "ossec.conf became invalid XML — restoring backup"
         systemctl restart wazuh-agent 2>/dev/null || true
     fi
 fi
@@ -362,5 +390,7 @@ systemctl is-active ${NAME} || true
 iptables -w -S SURICATA_IPS
 echo ""
 echo "[*] Rules loaded: $(suricata --build-info 2>/dev/null | grep -c '' >/dev/null && echo ok || echo '?') — check: grep -c 'alert' /var/lib/suricata/rules/suricata.rules 2>/dev/null || echo 0"
+echo "[*] Trusted bypass IPs (skip NFQUEUE): ${TRUSTED_IPS:-none}"
+echo "[*] JA3 TLS fingerprints: enabled in eve.json (tls.ja3 / ja3_hash)"
 echo "Dashboard: look for 'suricata' decoder events in Wazuh."
-echo "Uninstall: scripts/uninstall-suricata-ips.sh"
+echo "Uninstall: scripts/uninstall-suricata-all.sh"
