@@ -49,6 +49,7 @@ fail() { echo "[ERROR] $*" >&2; exit 1; }
 # ---------------------------------------------------------------
 AUTO_IFACE="$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')"
 AUTO_IFACE="${AUTO_IFACE:-$(ip -o route get 1.1.1.1 2>/dev/null | awk '{print $5; exit}')}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [ -n "${SURICATA_IFACE:-}" ]; then
     IFACE="$SURICATA_IFACE"
@@ -221,6 +222,12 @@ if ! suricata-update; then
     echo "[WARN] suricata-update rule download failed — continuing with existing rules"
 fi
 
+# Apply alert -> drop conversions BEFORE validation (drop.list present only)
+if [ -f "${SCRIPT_DIR}/suricata-drop-apply.sh" ] && [ -f /etc/suricata-drop.list ]; then
+    echo "[+] Applying alert->drop rule conversions from /etc/suricata-drop.list..."
+    bash "${SCRIPT_DIR}/suricata-drop-apply.sh" || true
+fi
+
 # ---------------------------------------------------------------
 # 3c. VALIDATE config BEFORE any inline hook is built.
 #     The old script wired NFQUEUE first and THEN discovered Suricata
@@ -378,7 +385,8 @@ BASE_DIR="$(dirname "$SCRIPT_DIR")"
 if [ -f "${SCRIPT_DIR}/suricata-health-monitor.sh" ]; then
     cp "${SCRIPT_DIR}/suricata-health-monitor.sh" /usr/local/bin/
     cp "${SCRIPT_DIR}/refresh-suricata-rules.sh" /usr/local/bin/
-    chmod 755 /usr/local/bin/suricata-health-monitor.sh /usr/local/bin/refresh-suricata-rules.sh
+    [ -f "${SCRIPT_DIR}/suricata-drop-apply.sh" ] && cp "${SCRIPT_DIR}/suricata-drop-apply.sh" /usr/local/bin/
+    chmod 755 /usr/local/bin/suricata-health-monitor.sh /usr/local/bin/refresh-suricata-rules.sh /usr/local/bin/suricata-drop-apply.sh 2>/dev/null
     cp "${BASE_DIR}/etc/suricata-health.service" /etc/systemd/system/ 2>/dev/null || true
     cp "${BASE_DIR}/etc/suricata-health.timer" /etc/systemd/system/ 2>/dev/null || true
     cp "${BASE_DIR}/etc/suricata-rules.service" /etc/systemd/system/ 2>/dev/null || true

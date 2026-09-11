@@ -90,7 +90,9 @@ echo "[+] Removing helpers + state..."
 rm -f /usr/local/bin/suricata-health-monitor.sh \
       /usr/local/bin/refresh-suricata-rules.sh \
       /usr/local/bin/suricata-ar-dispatch.sh \
-      /usr/local/bin/suricata-ip-block.sh
+      /usr/local/bin/suricata-ip-block.sh \
+      /usr/local/bin/suricata-drop-apply.sh
+rm -f /etc/suricata-drop.list
 for NAME in $MODES; do rm -f /etc/${NAME}.conf; done
 
 # ---------------------------------------------------------------

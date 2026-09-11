@@ -30,6 +30,12 @@ cp -r "${RULESET_DIR}" "${BACKUP_DIR}/rules-${ts}" 2>/dev/null || true
 ls -dt "${BACKUP_DIR}"/rules-* 2>/dev/null | tail -n +$((MAX_BACKUPS+1)) | xargs -r rm -rf
 
 echo "[+] Validating Suricata config + rules..."
+# Re-apply alert->drop conversions (suricata-update regenerates suricata.rules
+# and would otherwise silently revert every drop back to alert)
+if [ -f /etc/suricata-drop.list ] && [ -x /usr/local/bin/suricata-drop-apply.sh ]; then
+    echo "[+] Re-applying alert->drop conversions from /etc/suricata-drop.list..."
+    /usr/local/bin/suricata-drop-apply.sh || true
+fi
 # -T validates config + loaded rulesets. Must NOT pass -q (inline queue) here:
 # -q requires a queue id and is invalid in test mode, causing a spurious failure.
 if ! suricata -T -c "${CONFIG_DIR}/suricata.yaml" 2>&1 | tee /tmp/suricata-validate.log; then
