@@ -142,6 +142,9 @@ sudo systemctl enable --now suricata-ar-dispatch.service
 | **100160** | **10** | **BRUTEFORCE detected** | **attack,bruteforce,autoblock** |
 | **100161** | **12** | **C2/Beacon detected** | **attack,c2,autoblock** |
 | **100162** | **8** | **Scanning/Recon** | **recon,scan,autoblock** |
+| 100170 | 13 | IPS DROP confirmed (action=blocked) | suricata,ips_drop |
+| 100171 | 12 | IPS engine health failure (health monitor) | suricata,health |
+| 100175 | 14 | Known-bad JA3 hash (Cobalt Strike C2) | suricata,c2,ja3 |
 
 ---
 

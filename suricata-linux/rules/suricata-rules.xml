@@ -113,4 +113,44 @@
     <group>recon,scan,autoblock,</group>
   </rule>
 
+  <!-- ============================================================
+       PHASE 0 — PRODUCTION DETECTION
+       ============================================================ -->
+
+  <!-- 100170: engine packet DROP confirmed (action == blocked).
+       Parent 100100 = catch-all suricata-eve, so this fires regardless
+       of severity. Distinct from 100120 (severity-child, level 10):
+       this is the level-13 "verdict was actually DROP" signal. -->
+  <rule id="100170" level="13">
+    <if_sid>100100</if_sid>
+    <field name="data.event_type">alert</field>
+    <field name="data.alert.action">blocked</field>
+    <description>Suricata IPS DROP CONFIRMED $(data.src_ip) -> $(data.dest_ip):$(data.dest_port) by $(data.alert.signature)</description>
+    <group>suricata,ips_drop,</group>
+  </rule>
+
+  <!-- 100171: IPS engine health failure. Emitted by
+       scripts/suricata-health-monitor.sh as its OWN JSON localfile line:
+         {"suricata_health":{"agent":"..","status":"ok|warning|critical",...}}
+       No event_type key -> cannot parent on the suricata-eve chain, so
+       anchor on the built-in JSON decoder and the monitor's field names. -->
+  <rule id="100171" level="12">
+    <decoded_as>json</decoded_as>
+    <field name="data.suricata_health.status">critical|warning</field>
+    <description>Suricata HEALTH $(data.suricata_health.status) on agent $(data.suricata_health.agent)</description>
+    <group>suricata,health,</group>
+  </rule>
+
+  <!-- 100175: known-bad JA3 TLS fingerprint (C2 callback on client hello).
+       Two Cobalt Strike default JA3 hashes inline for Phase 0.
+       ponytail: upgrade to CDB list etc/lists/ja3-bad (thousands of hashes)
+       when the MISP JA3 feed lands (Phase 3) — replace the pcre2 field with
+       <list field="data.tls.ja3.hash" lookup="match_key">etc/lists/ja3-bad</list> -->
+  <rule id="100175" level="14">
+    <if_sid>100100</if_sid>
+    <field name="data.tls.ja3.hash" type="pcre2">(72a589da586844d7f0818ce684948eea|b742b407517bac9536a77a7b0fee28e9)</field>
+    <description>Suricata KNOWN-BAD JA3 $(data.tls.ja3.hash) C2 fingerprint $(data.src_ip) -> $(data.dest_ip) SNI $(data.tls.sni)</description>
+    <group>suricata,c2,ja3,</group>
+  </rule>
+
 </group>

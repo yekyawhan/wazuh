@@ -1,0 +1,6 @@
+<integration>
+  <name>custom-siem2-n8n</name>
+  <hook_url>http://127.0.0.1:5678/webhook/suricata-soc</hook_url>
+  <rule_id>100160, 100161, 100162, 100170, 100171, 100175</rule_id>
+  <alert_format>json</alert_format>
+</integration>

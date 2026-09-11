@@ -1,0 +1,19 @@
+# Production Suricata drop list — change-managed via git.
+# Copy this file to /etc/suricata-drop.list on the agents:
+#   cp etc/suricata-drop.list.production /etc/suricata-drop.list
+# Re-applied every 6h by refresh-suricata-rules.sh (suricata-update regenerates
+# the ruleset and would otherwise revert drops back to alerts).
+#
+# Entry types (one per line, '#' comments and blank lines ignored):
+#   category:ET TROJAN   # flip every alert rule whose msg:"..." starts "ET TROJAN"
+#   2034567             # flip a single rule by SID
+#
+# WARNING: `drop` rules in inline (NFQUEUE/IPS) mode BLOCK traffic outright.
+# ET MALWARE/TROJAN/CNC are high-confidence C2/malware categories, but always
+# `suricata -T` validate + watch alerts after any change here.
+#
+# Production set (Ko Ye, 2026-09-11): categories only + one canary SID.
+category:ET TROJAN
+category:ET MALWARE
+category:ET CNC
+2034567
