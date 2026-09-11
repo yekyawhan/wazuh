@@ -388,9 +388,35 @@ if [ -f "${SCRIPT_DIR}/suricata-health-monitor.sh" ]; then
     systemctl enable --now suricata-health.timer suricata-rules.timer 2>/dev/null || true
 fi
 
+# ---------------------------------------------------------------
+# 8. Auto-block dispatcher (IPS only) — daemon + AR helper + unit
+#    ET Open free ships 0 `drop` rules, so signature hits do NOT
+#    packet-drop in NFQUEUE; this dispatcher is the real block path
+#    (iptables WAZUH_SURICATA_BLOCK, 1h TTL). RFC1918 is whitelisted
+#    by default — internal test sources are intentionally never blocked.
+# ---------------------------------------------------------------
+if [ -f "${SCRIPT_DIR}/suricata-ar-dispatch.sh" ]; then
+    echo "[+] Installing auto-block dispatcher (bruteforce/C2/recon)..."
+    cp "${SCRIPT_DIR}/suricata-ar-dispatch.sh" /usr/local/bin/
+    cp "${BASE_DIR}/active-response/suricata-ip-block.sh" /usr/local/bin/
+    chmod 755 /usr/local/bin/suricata-ar-dispatch.sh /usr/local/bin/suricata-ip-block.sh
+    cp "${BASE_DIR}/etc/suricata-ar-dispatch.service" /etc/systemd/system/ 2>/dev/null || true
+    if [ ! -f /etc/systemd/system/suricata-ar-dispatch.service.d/override.conf ]; then
+        mkdir -p /etc/systemd/system/suricata-ar-dispatch.service.d
+        cp "${BASE_DIR}/etc/suricata-ar-dispatch.override.conf.example" \
+           /etc/systemd/system/suricata-ar-dispatch.service.d/override.conf 2>/dev/null || true
+    fi
+    systemctl daemon-reload
+    systemctl enable --now suricata-ar-dispatch.service 2>/dev/null || true
+    sleep 2
+    if systemctl is-active --quiet suricata-ar-dispatch; then
+        echo "    dispatcher: active (RFC1918 whitelisted; edit WHITELIST in override.conf)"
+    else
+        echo "    [WARN] dispatcher not active — check: journalctl -u suricata-ar-dispatch"
+    fi
+fi
+
 sleep 2
-echo ""
-echo "[OK] Suricata IPS active:"
 systemctl is-active ${NAME} || true
 iptables -w -S SURICATA_IPS
 echo ""

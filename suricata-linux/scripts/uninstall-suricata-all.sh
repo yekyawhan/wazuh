@@ -46,6 +46,18 @@ rm -f /etc/systemd/system/suricata-health.service \
       /etc/systemd/system/suricata-health.timer \
       /etc/systemd/system/suricata-rules.service \
       /etc/systemd/system/suricata-rules.timer
+
+# auto-block dispatcher: unit, drop-in, helper, block chain, state
+echo "[+] Removing auto-block dispatcher..."
+systemctl disable suricata-ar-dispatch --now 2>/dev/null || true
+rm -f /etc/systemd/system/suricata-ar-dispatch.service
+rm -rf /etc/systemd/system/suricata-ar-dispatch.service.d
+IPT=$(command -v iptables || echo /usr/sbin/iptables)
+"$IPT" -w -D FORWARD -j WAZUH_SURICATA_BLOCK 2>/dev/null || true
+"$IPT" -w -D INPUT   -j WAZUH_SURICATA_BLOCK 2>/dev/null || true
+"$IPT" -w -F WAZUH_SURICATA_BLOCK 2>/dev/null || true
+"$IPT" -w -X WAZUH_SURICATA_BLOCK 2>/dev/null || true
+rm -f /tmp/suricata-ar-blocklist
 systemctl daemon-reload
 
 # ---------------------------------------------------------------
@@ -77,7 +89,8 @@ done
 echo "[+] Removing helpers + state..."
 rm -f /usr/local/bin/suricata-health-monitor.sh \
       /usr/local/bin/refresh-suricata-rules.sh \
-      /usr/local/bin/suricata-ar-dispatch.sh
+      /usr/local/bin/suricata-ar-dispatch.sh \
+      /usr/local/bin/suricata-ip-block.sh
 for NAME in $MODES; do rm -f /etc/${NAME}.conf; done
 
 # ---------------------------------------------------------------
@@ -124,11 +137,12 @@ fi
 # ---------------------------------------------------------------
 echo "[=] Post-check:"
 LEFT=""
-for NAME in $MODES suricata-health suricata-rules; do
+for NAME in $MODES suricata-health suricata-rules suricata-ar-dispatch; do
     systemctl list-unit-files "${NAME}.*" --no-pager 2>/dev/null | grep -q "^${NAME}\." && LEFT="$LEFT ${NAME}.unit"
     [ -e "/etc/systemd/system/${NAME}.service" ] || [ -e "/etc/systemd/system/${NAME}.timer" ] && LEFT="$LEFT ${NAME}.file"
 done
 iptables -w -S 2>/dev/null | grep -q SURICATA_IPS && LEFT="$LEFT iptables"
+iptables -w -S 2>/dev/null | grep -q WAZUH_SURICATA_BLOCK && LEFT="$LEFT ar-chain"
 [ -f /usr/local/bin/refresh-suricata-rules.sh ] && LEFT="$LEFT helpers"
 pgrep -x suricata >/dev/null 2>&1 && LEFT="$LEFT running-process"
 
