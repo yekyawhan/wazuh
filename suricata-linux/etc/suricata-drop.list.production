@@ -5,15 +5,18 @@
 # the ruleset and would otherwise revert drops back to alerts).
 #
 # Entry types (one per line, '#' comments and blank lines ignored):
-#   category:ET TROJAN   # flip every alert rule whose msg:"..." starts "ET TROJAN"
-#   2034567             # flip a single rule by SID
+#   category:ET MALWARE    # flip every alert rule whose msg:"..." starts "ET MALWARE"
+#   2034567                # flip a single rule by SID
+#
+# NOTE (verified on live ET Open free, 2026-09-11): there is NO "ET TROJAN"
+# prefix in the free feed — Trojan signatures were consolidated into
+# "ET MALWARE" (26k+ rules). Do not re-add it; it WARNs as unmatched.
 #
 # WARNING: `drop` rules in inline (NFQUEUE/IPS) mode BLOCK traffic outright.
-# ET MALWARE/TROJAN/CNC are high-confidence C2/malware categories, but always
+# ET MALWARE / ET CNC are high-confidence C2/malware categories, but always
 # `suricata -T` validate + watch alerts after any change here.
 #
-# Production set (Ko Ye, 2026-09-11): categories only + one canary SID.
-category:ET TROJAN
+# Production set (Ko Ye, 2026-09-11):
 category:ET MALWARE
 category:ET CNC
 2034567
