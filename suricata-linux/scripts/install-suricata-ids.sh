@@ -180,7 +180,8 @@ if [ -d "${WAZUH_OSSEC}/etc" ]; then
     echo "[+] Registering Wazuh localfile for ${EVE_LOG}"
     LOCAL="${WAZUH_OSSEC}/etc/ossec.conf"
     if ! grep -q "suricata/eve.json" "${LOCAL}"; then
-        cp "${LOCAL}" "${LOCAL}.bak.suricata-ids"
+        cp -p "${LOCAL}" "${LOCAL}.bak.suricata-ids"
+        BAK_MODE=$(stat -c '%a' "${LOCAL}"); BAK_OWNER=$(stat -c '%u:%g' "${LOCAL}")
         python3 - <<PY
 import xml.etree.ElementTree as ET
 p = "${WAZUH_OSSEC}/etc/ossec.conf"
@@ -192,8 +193,12 @@ ET.SubElement(lf, 'location').text = '/var/log/suricata/eve.json'
 tree.write(p)
 print("[+] localfile injected, XML valid")
 PY
+        # tree.write() recreates the file root:root 0644 -> restore agent ownership
+        chown "${BAK_OWNER}" "${LOCAL}"; chmod "${BAK_MODE}" "${LOCAL}"
         python3 -c "import xml.etree.ElementTree as ET; ET.parse('${WAZUH_OSSEC}/etc/ossec.conf')" || fail "ossec.conf became invalid XML — restoring backup"
         systemctl restart wazuh-agent 2>/dev/null || true
+        sleep 3
+        systemctl is-active wazuh-agent >/dev/null 2>&1 || fail "wazuh-agent not active after ossec.conf edit"
     fi
 fi
 

@@ -96,7 +96,12 @@ for b in "${WAZUH_OSSEC}/etc/ossec.conf.bak.suricata-ips" \
     if [ -f "$b" ]; then
         echo "[+] Restoring Wazuh ossec.conf from $(basename "$b")..."
         mv "$b" "${WAZUH_OSSEC}/etc/ossec.conf"
+        # normalize ownership/mode — agent reads ossec.conf as wazuh:wazuh (older backups may be root:root)
+        chown wazuh:wazuh "${WAZUH_OSSEC}/etc/ossec.conf" 2>/dev/null || chown root:wazuh "${WAZUH_OSSEC}/etc/ossec.conf" 2>/dev/null || true
+        chmod 640 "${WAZUH_OSSEC}/etc/ossec.conf"
         systemctl restart wazuh-agent 2>/dev/null || true
+        sleep 3
+        systemctl is-active wazuh-agent >/dev/null 2>&1 || echo "[WARN] wazuh-agent not active after restore — check ossec.conf manually"
         break
     fi
 done
