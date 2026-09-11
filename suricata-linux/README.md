@@ -9,10 +9,25 @@ NFQUEUE verdict (IPS) / af-packet passive (IDS), EVE-JSON → Wazuh, auto-block 
 
 | Mode | Script | ဘယ်မှာသုံးမလဲ | Traffic blocking |
 |---|---|---|---|
-| **IPS (inline)** | `install-suricata-ips.sh` | Cloud compute/mgmt servers | ✅ NFQUEUE drop (fail-closed) |
+| **IPS (inline)** | `install-suricata-ips.sh` | Cloud compute/mgmt servers | ✅ NFQUEUE verdict + AR dispatcher |
 | **IDS (passive)** | `install-suricata-ids.sh` | PVE hypervisors, critical infra | ❌ မရှိ — monitor only |
 
 > ⚠️ **PVE hypervisor မှာ IPS မသွင်းပါနဲ့** — fail-closed က VM traffic အားလုံး drop နိုင်တယ်။ IDS-only သုံးပါ။
+
+---
+
+## Blocking model — IPS မှာ packet ဘယ်လို drop ဖြစ်လဲ (၂ လမ်း)
+
+**လမ်း ၁ — Packet-level (NFQUEUE):** Suricata rule action သည် **`drop`** ဖြစ်မှ engine ကိုယ်တိုင် ထောင့်တယ် (verdict drop)။ ⚠️ **ET Open free ruleset တစ်ခုလုံးမှာ `alert` ၅၂,၆၆၅ ခုပဲရှိ၊ `drop` တစ်ခုမှ မရှိ** — ဆိုတော့ signature ထိလည်း accept ပဲ။ `ips.blocked` stats က midstream/stream_error drops ပဲ တက်တယ်။ Drop-to-alert conversion (suricata-update drop.rules / `modify` via `transform`) လုပ်မှ လိုချင်ရယ်။
+
+**လမ်း ၂ — AR dispatcher (default block path):** `suricata-ar-dispatch.service` daemon (installer section 8 က auto-deploy) က eve.json tail → signature `[Brute/C2/Scan]` patterns `[100160/100161/100162]` နဲ့ ကိုက်ရင် `suricata-ip-block.sh` ခေါ် → `iptables -I WAZUH_SURICATA_BLOCK -s <src_ip> -j DROP` (FORWARD+INPUT jump၊ 1h TTL auto-expire)။ **Ko Ye C2 test မှာ drop မြင်ချင်ရင် ဒီလမ်း** — dispatcher active ဖြစ်ရမယ်၊ test source IP က WHITELIST (default RFC1918) အပြင် ဖြစ်ရမယ် (ဥပမာ TEST-NET `198.51.100.x`)။ Internal IP နဲ့ စမ်းရင် `SKIP whitelisted` ပဲ။
+
+Verify:
+```bash
+systemctl is-active suricata-ar-dispatch                # active ဖြစ်ရမယ်
+sudo iptables -L WAZUH_SURICATA_BLOCK -n               # DROP entries မြင်ရမယ်
+sudo journalctl -u suricata-ar-dispatch --since "10 min ago" | grep BLOCK
+```
 
 ---
 
@@ -89,8 +104,14 @@ sudo systemctl restart wazuh-manager
 
 ## IPS-only: Auto-block daemon
 
+Installer (section 8) deploys this automatically: `suricata-ar-dispatch.sh` +
+`active-response/suricata-ip-block.sh` → `/usr/local/bin/`, unit + drop-in override,
+`enable --now`, is-active check. Manual steps below only if you skipped it or want
+to customize:
+
 ```bash
 sudo cp scripts/suricata-ar-dispatch.sh /usr/local/bin/
+sudo cp active-response/suricata-ip-block.sh /usr/local/bin/
 sudo cp etc/suricata-ar-dispatch.service /etc/systemd/system/
 sudo mkdir -p /etc/systemd/system/suricata-ar-dispatch.service.d
 sudo cp etc/suricata-ar-dispatch.override.conf.example \
@@ -98,6 +119,10 @@ sudo cp etc/suricata-ar-dispatch.override.conf.example \
 sudo systemctl daemon-reload
 sudo systemctl enable --now suricata-ar-dispatch.service
 ```
+
+> WHITELIST (override.conf) = never-block list. Default = all RFC1918 — meaning
+> internal C2-test sources are **not** blocked. Use TEST-NET (198.51.100.x) for
+> drop tests or add/remove ranges in the override.
 
 ---
 
@@ -151,6 +176,7 @@ boxes named `ens*`), restores the Wazuh `ossec.conf` backup, and self-verifies w
 | 1 | `tree.write()` recreates `ossec.conf` as `root:root 0644` → agent cannot read config, wazuh-agent dies after IPS install | Installer captures original mode/owner (`stat`), restores `chown`/`chmod` after injection; backup taken with `cp -p` |
 | 2 | Installer restarts wazuh-agent blindly, never verifies it came back | Post-restart health gate: `sleep 3` + `systemctl is-active wazuh-agent` → `fail` on both installers |
 | 3 | Uninstaller restored backups that could be `root:root` (made by pre-fix installers) | Restore path normalizes `chown wazuh:wazuh` + `chmod 640` + warns if agent not active |
+| 4 | C2 test alerted but never dropped: ET Open free = 0 `drop` rules (verdict always accept), and `suricata-ar-dispatch` (the real block path) was never deployed by the installer — testbox2 daemon sat in a 711x crash-loop (`AR_BIN suricata-ip-block.sh not found`) | IPS installer section 8 auto-deploys dispatcher + `suricata-ip-block.sh` + unit + override, enables + is-active check; uninstaller now scrubs dispatch unit/drop-in/helper, `WAZUH_SURICATA_BLOCK` chain + jumps, blocklist file; self-verify extended. E2E: synthetic ET TROJANS beacon 198.51.100.77 → `[dispatch] BLOCK` + iptables DROP confirmed on testbox2 |
 
 **Breaking boxes — manual repair (one line):**
 
