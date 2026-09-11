@@ -144,6 +144,22 @@ stock `suricata.service` (does not re-enable it — its `eth0` default crash-loo
 boxes named `ens*`), restores the Wazuh `ossec.conf` backup, and self-verifies with
 `[OK] CLEAN` or exit 1 listing leftovers.
 
+## Fix log (2026-09-11)
+
+| # | Bug | Fix |
+|---|---|---|
+| 1 | `tree.write()` recreates `ossec.conf` as `root:root 0644` → agent cannot read config, wazuh-agent dies after IPS install | Installer captures original mode/owner (`stat`), restores `chown`/`chmod` after injection; backup taken with `cp -p` |
+| 2 | Installer restarts wazuh-agent blindly, never verifies it came back | Post-restart health gate: `sleep 3` + `systemctl is-active wazuh-agent` → `fail` on both installers |
+| 3 | Uninstaller restored backups that could be `root:root` (made by pre-fix installers) | Restore path normalizes `chown wazuh:wazuh` + `chmod 640` + warns if agent not active |
+
+**Breaking boxes — manual repair (one line):**
+
+```bash
+sudo chown wazuh:wazuh /var/ossec/etc/ossec.conf && sudo chmod 640 /var/ossec/etc/ossec.conf && sudo systemctl restart wazuh-agent
+```
+
+---
+
 ## Fix log (2026-09-09)
 
 | # | Bug | Fix |
