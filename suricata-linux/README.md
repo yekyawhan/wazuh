@@ -74,9 +74,12 @@ suricata-linux/
 │   ├── suricata-poc.sh                    # one-shot PoC: install → traffic → detect → uninstall → clean
 │   ├── suricata-health-monitor.sh         # health check → health.json
 │   ├── refresh-suricata-rules.sh          # ET ruleset update + validate + rollback
+│   ├── suricata-drop-apply.sh             # drop.list → drop-action conversion (validated reload)
+│   ├── suricata-drop-sync.sh              # share drop.list(.local/.replace) → /etc auto-sync (agent-side)
 │   └── suricata-ar-dispatch.sh            # agent-side auto-block daemon (IPS only)
 ├── etc/
 │   ├── suricata-ar-dispatch.service       # dispatch daemon systemd unit
+│   ├── suricata-drop-sync.{path,service}  # share→/etc drop.list auto-sync trigger
 │   ├── suricata-health.{service,timer}    # health watchdog timer
 │   ├── suricata-rules.{service,timer}     # rule refresh timer
 │   ├── suricata-logrotate                 # daily eve.json logrotate
@@ -98,6 +101,31 @@ sudo cp /var/ossec/etc/shared/default/suricata-linux/rules/suricata-rules.xml /v
 sudo chown wazuh:wazuh /var/ossec/etc/decoders/suricata-decoder.xml /var/ossec/etc/rules/suricata-rules.xml
 sudo chmod 640 /var/ossec/etc/decoders/suricata-decoder.xml /var/ossec/etc/rules/suricata-rules.xml
 sudo systemctl restart wazuh-manager
+```
+
+---
+
+## Agent-group drop lists (auto-sync chain)
+
+Manager က agent group တိုင်းအတွက် drop list သီးသန့် ထုတ်ပေး — agent တွေ အလိုအလျောက် pull → apply → validated reload:
+
+```
+/var/ossec/etc/shared/<group>/suricata-linux/etc/
+  suricata-drop.list.production   # baseline (ET MALWARE/CNC + canary 2034567)
+  suricata-drop.list.local        # ထပ်ထည့် sid (additive)  — group သီးသန့်
+  suricata-drop.list.replace      # baseline အစားထိုး (group ကိုယ်ပိုင် list)
+```
+
+- Agent မှာ `suricata-drop-sync.path` (PathChanged) က share file ပြောင်းလဲမှုကို စောင့် → `suricata-drop-sync.sh` resolve → `/etc/suricata-drop.list` → `suricata -T` validated → USR2 reload
+- Precedence: `.replace` > (`.production` + `.local`)
+- Agent group အသစ်စာရင်း: `/var/ossec/bin/agent_groups -a -g <grp> -q` နဲ့ ချိတ်၊ share ထဲ `suricata-linux/etc/` တစ်ခုတည်း လိုတယ် (agent တိုင်း ဘာမှ ဆွဲရရန် မလို)
+- `refresh-suricata-rules.sh` အစပိုင်းမှာ `--copy-only` pre-sync (24h timer ကိုပါ တစ်ပတ်တည်း စနစ်တကျဖြစ်စေ)
+
+**Verify (agent မှာ):**
+```bash
+systemctl status suricata-drop-sync.path
+journalctl -u suricata-drop-sync -f
+md5sum /etc/suricata-drop.list /var/ossec/etc/shared/suricata-linux/etc/suricata-drop.list.production
 ```
 
 ---
