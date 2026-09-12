@@ -21,6 +21,12 @@ suricata-update update-sources 2>/dev/null || true
 suricata-update enable-source et/open 2>/dev/null || true
 suricata-update
 
+# Pull the current drop list from the Wazuh share (group-specific variants are
+# resolved by the sync script) before re-applying conversions below.
+if [ -x /usr/local/bin/suricata-drop-sync.sh ]; then
+    /usr/local/bin/suricata-drop-sync.sh --copy-only || true
+fi
+
 # Backup current ruleset before reload
 ts="$(date +%Y%m%d-%H%M%S)"
 mkdir -p "${BACKUP_DIR}"

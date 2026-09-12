@@ -47,6 +47,12 @@ rm -f /etc/systemd/system/suricata-health.service \
       /etc/systemd/system/suricata-rules.service \
       /etc/systemd/system/suricata-rules.timer
 
+echo "[+] Stopping share drop-list sync path..."
+systemctl stop    suricata-drop-sync.path 2>/dev/null || true
+systemctl disable suricata-drop-sync.path 2>/dev/null || true
+rm -f /etc/systemd/system/suricata-drop-sync.path \
+      /etc/systemd/system/suricata-drop-sync.service
+
 # auto-block dispatcher: unit, drop-in, helper, block chain, state
 echo "[+] Removing auto-block dispatcher..."
 systemctl disable suricata-ar-dispatch --now 2>/dev/null || true
@@ -91,7 +97,8 @@ rm -f /usr/local/bin/suricata-health-monitor.sh \
       /usr/local/bin/refresh-suricata-rules.sh \
       /usr/local/bin/suricata-ar-dispatch.sh \
       /usr/local/bin/suricata-ip-block.sh \
-      /usr/local/bin/suricata-drop-apply.sh
+      /usr/local/bin/suricata-drop-apply.sh \
+      /usr/local/bin/suricata-drop-sync.sh
 rm -f /etc/suricata-drop.list
 for NAME in $MODES; do rm -f /etc/${NAME}.conf; done
 

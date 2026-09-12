@@ -393,8 +393,10 @@ BASE_DIR="$(dirname "$SCRIPT_DIR")"
 if [ -f "${SCRIPT_DIR}/suricata-health-monitor.sh" ]; then
     cp "${SCRIPT_DIR}/suricata-health-monitor.sh" /usr/local/bin/
     cp "${SCRIPT_DIR}/refresh-suricata-rules.sh" /usr/local/bin/
-    [ -f "${SCRIPT_DIR}/suricata-drop-apply.sh" ] && cp "${SCRIPT_DIR}/suricata-drop-apply.sh" /usr/local/bin/
+    cp "${SCRIPT_DIR}/suricata-drop-apply.sh" /usr/local/bin/ 2>/dev/null
+    [ -f "${SCRIPT_DIR}/suricata-drop-sync.sh" ] && cp "${SCRIPT_DIR}/suricata-drop-sync.sh" /usr/local/bin/
     chmod 755 /usr/local/bin/suricata-health-monitor.sh /usr/local/bin/refresh-suricata-rules.sh /usr/local/bin/suricata-drop-apply.sh 2>/dev/null
+    chmod 755 /usr/local/bin/suricata-drop-sync.sh 2>/dev/null
     cp "${BASE_DIR}/etc/suricata-health.service" /etc/systemd/system/ 2>/dev/null || true
     cp "${BASE_DIR}/etc/suricata-health.timer" /etc/systemd/system/ 2>/dev/null || true
     cp "${BASE_DIR}/etc/suricata-rules.service" /etc/systemd/system/ 2>/dev/null || true
@@ -402,6 +404,12 @@ if [ -f "${SCRIPT_DIR}/suricata-health-monitor.sh" ]; then
     cp "${BASE_DIR}/etc/suricata-logrotate" /etc/logrotate.d/suricata 2>/dev/null || true
     systemctl daemon-reload
     systemctl enable --now suricata-health.timer suricata-rules.timer 2>/dev/null || true
+    # Share-driven drop list sync (Wazuh centralized config -> live /etc file)
+    if [ -f "${BASE_DIR}/etc/suricata-drop-sync.path" ]; then
+        cp "${BASE_DIR}/etc/suricata-drop-sync."{path,service} /etc/systemd/system/
+        systemctl daemon-reload
+        systemctl enable --now suricata-drop-sync.path 2>/dev/null || true
+    fi
 fi
 
 # ---------------------------------------------------------------

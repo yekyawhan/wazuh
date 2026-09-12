@@ -1,0 +1,9 @@
+[Unit]
+Description=Sync Suricata drop list from Wazuh share and reload engine
+Documentation=file:/usr/local/bin/suricata-drop-sync.sh
+StartLimitIntervalSec=0
+StartLimitBurst=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/suricata-drop-sync.sh

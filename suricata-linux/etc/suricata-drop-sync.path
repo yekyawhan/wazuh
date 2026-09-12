@@ -1,0 +1,15 @@
+[Unit]
+Description=Watch Wazuh shared Suricata drop list for agent-side changes
+Documentation=file:/usr/local/bin/suricata-drop-sync.sh
+
+[Path]
+# PathChanged only: Wazuh merges create share entries once, then update in
+# place (PathExistsGlob fires on creation and, with the agent's rewrite
+# bursts, drove start-limit failures). System units run as root, so the
+# 0600 wazuh-owned share files are readable here and by the sync service.
+PathChanged=/var/ossec/etc/shared/suricata-linux/etc/suricata-drop.list.production
+PathChanged=/var/ossec/etc/shared/suricata-linux/etc/suricata-drop.list.local
+PathChanged=/var/ossec/etc/shared/suricata-linux/etc/suricata-drop.list.replace
+
+[Install]
+WantedBy=multi-user.target
