@@ -11,8 +11,12 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [240, 300],
-      "webhookId": "suricata-soc"
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "suricata-soc",
+      "id": "87b72f45-2bc1-4966-9fda-629bc5560558"
     },
     {
       "parameters": {
@@ -21,7 +25,11 @@
       "name": "Filter and Enrich",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ],
+      "id": "50ec5c88-217a-447c-885f-509fdb4d6471"
     },
     {
       "parameters": {
@@ -30,7 +38,11 @@
       "name": "24h Dedupe",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ],
+      "id": "877038b1-36a3-42f5-ac1e-6201aba2e27e"
     },
     {
       "parameters": {
@@ -46,17 +58,76 @@
       "name": "Severity Gate",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [900, 300]
+      "position": [
+        900,
+        300
+      ],
+      "id": "9b07e599-f020-41de-88d2-c94c647d0ce0"
     },
     {
       "parameters": {
-        "jsCode": "const item = $input.first().json;\nconst botToken = $env.SOC_TELEGRAM_BOT_TOKEN || '{{SOC_TG_TOKEN}}';\nconst chatId = '-1004301734497';\n\nconst text = `🔴 <b>[SURICATA IPS ALERT]</b>\\n` +\n  `<b>Type:</b> ${item.ruleId === '100170' ? 'PACKET DROP (NFQUEUE)' : 'HOST AUTO-BLOCK (AR)'}\\n` +\n  `<b>Rule ID:</b> ${item.ruleId} (Level ${item.ruleLevel})\\n` +\n  `<b>Agent:</b> ${item.agentName}\\n` +\n  `<b>Attacker:</b> <code>${item.srcIp}</code>\\n` +\n  `<b>Target:</b> <code>${item.dstIp}:${item.dstPort}</code>\\n` +\n  `<b>Signature:</b> ${item.sig}`;\n\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: `https://api.telegram.org/bot${botToken}/sendMessage`,\n    body: {\n      chat_id: chatId,\n      text: text,\n      parse_mode: 'HTML',\n      disable_web_page_preview: true\n    },\n    json: true\n  });\n} catch (err) {\n  // ignore TG delivery failure so flow does not crash\n}\n\nreturn [{ json: item }];"
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "-1004301734497",
+        "text": "={{ '\ud83d\udd34 <b>[SURICATA IPS ALERT]</b>\\n' + '<b>Type:</b> ' + ($json.ruleId === '100170' ? 'PACKET DROP (NFQUEUE)' : 'HOST AUTO-BLOCK (AR)') + '\\n' + '<b>Rule ID:</b> ' + $json.ruleId + ' (Level ' + $json.ruleLevel + ')' + '\\n' + '<b>Agent:</b> ' + $json.agentName + '\\n' + '<b>Attacker:</b> <code>' + $json.srcIp + '</code>\\n' + '<b>Target:</b> <code>' + $json.dstIp + ':' + $json.dstPort + '</code>\\n' + '<b>Signature:</b> ' + $json.sig + '\\n' + '<b>Action:</b> ' + $json.action }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
       },
       "name": "Telegram Alert",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1120, 200],
-      "onError": "continueRegularOutput"
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        200
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "telegramApi": {
+          "id": "eCt4h9eYogj45d07",
+          "name": "Telegram account"
+        }
+      },
+      "id": "a5e66c53-350e-4529-b620-2833f715a5e2",
+      "webhookId": "8fc5f174-0feb-4f36-87ab-18a73229f58c"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "0ARlCwjbJIHA8E2Q"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.alert.timestamp || $json.alert.rule?.description ? new Date().toISOString() : '' }}",
+            "rule_id": "={{ $json.ruleId }}",
+            "rule_level": "={{ $json.ruleLevel }}",
+            "agent_name": "={{ $json.agentName }}",
+            "src_ip": "={{ $json.srcIp }}",
+            "dst_ip": "={{ $json.dstIp }}",
+            "dst_port": "={{ String($json.dstPort) }}",
+            "signature": "={{ $json.sig }}",
+            "action": "={{ $json.action }}",
+            "created_at": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "name": "Log to Events Table",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        900,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "id": "4fc55d2d-9c70-42c7-b9d5-2a94bc2a5d6c"
     }
   ],
   "connections": {
@@ -89,6 +160,11 @@
             "node": "Severity Gate",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Log to Events Table",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -103,6 +179,14 @@
           }
         ]
       ]
+    },
+    "Log to Events Table": {
+      "main": [
+        []
+      ]
     }
+  },
+  "settings": {
+    "executionOrder": "v1"
   }
 }

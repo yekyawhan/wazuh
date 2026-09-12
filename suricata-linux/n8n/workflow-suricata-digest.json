@@ -1,0 +1,265 @@
+{
+  "name": "Suricata IPS Daily Digest",
+  "nodes": [
+    {
+      "name": "Daily 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "9943fc80-f33c-4ca2-bdfa-5c4d886a9048"
+    },
+    {
+      "name": "Check Ledger Today",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Yangon' });\nreturn [{ json: { today } }];"
+      },
+      "id": "6257d3af-1cd6-48af-81a3-5cef69c42f55"
+    },
+    {
+      "name": "Read Events 24h",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        1260,
+        400
+      ],
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "0ARlCwjbJIHA8E2Q"
+        },
+        "returnAll": true
+      },
+      "id": "f47e0d5a-d95c-41e1-afd4-939212045aaf"
+    },
+    {
+      "name": "Read Recipients",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        1460,
+        400
+      ],
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5pPjepCTI5LJtWbF"
+        },
+        "returnAll": true
+      },
+      "id": "6a8416de-6e60-49c7-b114-f44719caa02f"
+    },
+    {
+      "name": "Build Digest Mail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        400
+      ],
+      "parameters": {
+        "jsCode": "const events = $items('Read Events 24h').map(i => i.json);\nconst now = Date.now();\nconst since = now - 24 * 3600 * 1000;\nconst recent = events.filter(e => {\n  const t = Date.parse(e.created_at || e.timestamp || '');\n  return t && t >= since;\n});\n\nif (recent.length === 0) return [];   // quiet day -> no mail, no ledger row\n\nconst recs = $items('Read Recipients').map(i => i.json)\n  .filter(r => r.active === true || r.active === 'true' || r.active === 1);\nconst to = [...new Set(recs.map(r => r.email))].filter(e => e && e.includes('@')).join(',');\nif (!to) return [];\n\n// aggregate\nconst bySig = {}, bySrc = {}, byAgent = {}, drops = {};\nfor (const e of recent) {\n  bySig[e.signature] = (bySig[e.signature] || 0) + 1;\n  bySrc[e.src_ip] = (bySrc[e.src_ip] || 0) + 1;\n  byAgent[e.agent_name] = (byAgent[e.agent_name] || 0) + 1;\n  if (e.action === 'blocked') drops[e.signature] = (drops[e.signature] || 0) + 1;\n}\nconst top = (o, n = 10) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n);\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst rowsOf = (o) => top(o).map(([k, v]) =>\n  `<tr><td style=\"padding:8px 14px;border-bottom:1px solid #1e293b;font-family:monospace;color:#e2e8f0\">${esc(k)}</td><td style=\"padding:8px 14px;border-bottom:1px solid #1e293b;text-align:right;color:#94a3b8\">${v}</td></tr>`).join('');\n\nconst today = $('Check Ledger Today').first().json.today;\nconst dropCount = Object.values(drops).reduce((a, b) => a + b, 0);\n\nconst html = `<!doctype html><html><body style=\"margin:0;background:#020617;font-family:Arial,Helvetica,sans-serif\">\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#020617;padding:24px\">\n<tr><td align=\"center\"><table width=\"640\" style=\"background:#0f172a;border:1px solid #1e293b;border-radius:12px;overflow:hidden\">\n<tr><td style=\"padding:20px 28px;background:#0f172a;border-bottom:1px solid #1e293b\">\n  <img src=\"https://www.agbcommunication.com/_next/static/media/AGBLogo.77b5873b.svg\" height=\"38\" style=\"float:left\">\n  <span style=\"float:right;color=${dropCount ? '#ef4444' : '#22c55e'};border:1px solid ${dropCount ? '#7f1d1d' : '#14532d'};background:${dropCount ? '#450a0a' : '#052e16'};border-radius:20px;padding:4px 14px;font-size:12px;font-weight:bold\">${dropCount ? '\u26a0 ' + dropCount + ' PACKET DROPS' : '\u2713 NO DROPS'}</span>\n  <div style=\"clear:both\"></div></td></tr>\n<tr><td style=\"padding:28px\">\n  <h2 style=\"color:#f8fafc;font-size:18px;margin:0 0 6px\">Suricata IPS Daily Digest</h2>\n  <p style=\"color:#64748b;font-size:13px;margin:0 0 24px\">${today} \u00b7 last 24 hours \u00b7 ${recent.length} events across ${Object.keys(byAgent).length} agent(s)</p>\n  <h3 style=\"color:#38bdf8;font-size:14px;border-bottom:1px solid #1e293b;padding-bottom:8px\">Top Signatures</h3>\n  <table width=\"100%\" style=\"border-collapse:collapse;font-size:13px\">${rowsOf(bySig)}</table>\n  <h3 style=\"color:#38bdf8;font-size:14px;border-bottom:1px solid #1e293b;padding:18px 0 8px\">Top Source IPs</h3>\n  <table width=\"100%\" style=\"border-collapse:collapse;font-size:13px\">${rowsOf(bySrc)}</table>\n  <h3 style=\"color:#38bdf8;font-size:14px;border-bottom:1px solid #1e293b;padding:18px 0 8px\">Per-Agent</h3>\n  <table width=\"100%\" style=\"border-collapse:collapse;font-size:13px\">${rowsOf(byAgent)}</table>\n  ${dropCount ? `<h3 style=\"color:#ef4444;font-size:14px;border-bottom:1px solid #1e293b;padding:18px 0 8px\">\ud83d\udd34 Packet Drops (NFQUEUE)</h3>\n  <table width=\"100%\" style=\"border-collapse:collapse;font-size:13px\">${rowsOf(drops)}</table>` : ''}\n  <p style=\"color:#475569;font-size:11px;margin-top:26px\">Automated digest \u2014 AGB SOC \u00b7 Suricata IPS fleet \u00b7 reply TG group for instant alerts</p>\n</td></tr></table></td></tr></table></body></html>`;\n\nreturn [{ json: {\n  toEmail: to,\n  subject: `[AGB SOC] Suricata IPS Digest ${today} \u2014 ${recent.length} events${dropCount ? ', ' + dropCount + ' DROPS' : ''}`,\n  html,\n  count: recent.length,\n  today\n}}];"
+      },
+      "id": "5d8cb0a8-289a-43bc-988c-80889a5f4e17"
+    },
+    {
+      "name": "Send Digest",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1860,
+        400
+      ],
+      "parameters": {
+        "fromEmail": "cybersecurity@agbisp.net",
+        "toEmail": "={{ $json.toEmail }}",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "siem2_smtp_cred",
+          "name": "siem2-smtp"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "fa3909c8-953e-4a56-ac52-edf619db8882",
+      "webhookId": "85f9793a-8a86-4f3b-9ccd-8601f7fa8e28"
+    },
+    {
+      "name": "Write Ledger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2060,
+        400
+      ],
+      "parameters": {
+        "jsCode": "const j = $('Build Digest Mail').first().json;\nreturn [{ json: {\n  digest_date: j.today,\n  status: 'sent',\n  alert_count: Number(j.count || 0),\n  sent_to: String(j.toEmail || '').slice(0, 300),\n  sent_at: new Date().toISOString()\n} }];"
+      },
+      "id": "109dad79-7209-45a8-bc80-7f47ed924db5"
+    },
+    {
+      "name": "Ledger Insert",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        2260,
+        400
+      ],
+      "parameters": {
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ryM0V3Lm7leKYpo7"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "digest_date": "={{ $json.digest_date }}",
+            "status": "={{ $json.status }}",
+            "alert_count": "={{ $json.alert_count }}",
+            "sent_to": "={{ String($json.sent_to).slice(0, 300) }}",
+            "sent_at": "={{ $json.sent_at }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "77ab24c6-0918-4dd8-854e-225cc4c8b6cb"
+    },
+    {
+      "name": "Ledger Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// same-day guard: today's ledger row with status 'sent' -> emit 0 items (flow stops)\nconst today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Yangon' });\nconst res = await this.helpers.httpRequest({\n  url: 'http://127.0.0.1:5678/api/v1/data-tables/ryM0V3Lm7leKYpo7/rows?filter=' +\n       encodeURIComponent(JSON.stringify({ \"digest_date\": { \"$eq\": today } })),\n  headers: { 'X-N8N-API-KEY': '<API_KEY_AT_DEPLOY>' },\n  json: true\n});\nconst rows = res.data || [];\nif (rows.some(r => ((r.data || r).status) === 'sent')) {\n  console.log('digest already sent today \u2014 skipping');\n  return [];\n}\nreturn [{ json: { today } }];"
+      },
+      "id": "799e3879-f3ed-4ef4-a2c4-03db7e60b7f6"
+    }
+  ],
+  "connections": {
+    "Daily 09:00": {
+      "main": [
+        [
+          {
+            "node": "Check Ledger Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Ledger Today": {
+      "main": [
+        [
+          {
+            "node": "Ledger Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ledger Check": {
+      "main": [
+        [
+          {
+            "node": "Read Events 24h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Events 24h": {
+      "main": [
+        [
+          {
+            "node": "Read Recipients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Recipients": {
+      "main": [
+        [
+          {
+            "node": "Build Digest Mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Digest Mail": {
+      "main": [
+        [
+          {
+            "node": "Send Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Digest": {
+      "main": [
+        [
+          {
+            "node": "Write Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Ledger": {
+      "main": [
+        [
+          {
+            "node": "Ledger Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Yangon"
+  }
+}

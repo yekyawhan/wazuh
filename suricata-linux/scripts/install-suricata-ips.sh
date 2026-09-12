@@ -50,6 +50,7 @@ fail() { echo "[ERROR] $*" >&2; exit 1; }
 AUTO_IFACE="$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')"
 AUTO_IFACE="${AUTO_IFACE:-$(ip -o route get 1.1.1.1 2>/dev/null | awk '{print $5; exit}')}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BASE_DIR="$(dirname "$SCRIPT_DIR")"
 
 if [ -n "${SURICATA_IFACE:-}" ]; then
     IFACE="$SURICATA_IFACE"
@@ -222,6 +223,13 @@ if ! suricata-update; then
     echo "[WARN] suricata-update rule download failed — continuing with existing rules"
 fi
 
+# Seed production drop list from repo if agent has none yet (shared-folder
+# distribution). Empty/preset file on the box = operator override, untouched.
+PROD_LIST="${BASE_DIR}/etc/suricata-drop.list.production"
+if [ ! -f /etc/suricata-drop.list ] && [ -f "$PROD_LIST" ]; then
+    cp "$PROD_LIST" /etc/suricata-drop.list
+    echo "[+] Seeded /etc/suricata-drop.list from production list"
+fi
 # Apply alert -> drop conversions BEFORE validation (drop.list present only)
 if [ -f "${SCRIPT_DIR}/suricata-drop-apply.sh" ] && [ -f /etc/suricata-drop.list ]; then
     echo "[+] Applying alert->drop rule conversions from /etc/suricata-drop.list..."
