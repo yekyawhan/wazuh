@@ -1,5 +1,11 @@
 {
  "name": "Suricata IPS SOC",
+ "activeVersionId": "2e3690cc-be28-47c2-bb1c-02750874eba6",
+ "isArchived": false,
+ "versionId": "2e3690cc-be28-47c2-bb1c-02750874eba6",
+ "versionCounter": 13,
+ "sourceWorkflowId": null,
+ "triggerCount": 1,
  "nodes": [
   {
    "parameters": {
@@ -19,7 +25,7 @@
   },
   {
    "parameters": {
-    "jsCode": "const wrapper = $input.first().json;\n// Wazuh integration POSTs the alert; n8n webhook wraps it under `body`\nconst raw = wrapper.body && wrapper.body.rule ? wrapper.body : wrapper;\nconst a = raw.agent || {};\nconst r = raw.rule || {};\nconst d = raw.data || {};\nconst al = d.alert || raw.alert || {};\nconst srcIp = d.srcip || al.src_ip || 'N/A';\nconst dstIp = d.dstip || al.dest_ip || 'N/A';\nconst dstPort = (d.dstport || al.dest_port || 'N/A').toString();\nconst sig = al.signature || raw.description || r.description || 'unknown';\nconst action = al.action || d.action || 'alerted';\nreturn [{ json: {\n  alert: raw,\n  ruleId: String(r.id || ''),\n  ruleLevel: r.level || 0,\n  agentName: a.name || 'unknown',\n  srcIp, dstIp, dstPort, sig, action,\n  isCritical: (r.level || 0) >= 13\n}}];"
+    "jsCode": "const wrapper = $input.first().json;\nconst raw = wrapper.body && wrapper.body.rule ? wrapper.body : wrapper;\nconst a = raw.agent || {};\nconst r = raw.rule || {};\nconst d = raw.data || {};\nconst al = d.alert || raw.alert || {};\nconst srcIp = d.srcip || al.src_ip || 'N/A';\nconst dstIp = d.dstip || al.dest_ip || 'N/A';\nconst dstPort = (d.dstport || al.dest_port || 'N/A').toString();\nconst sig = al.signature || raw.description || r.description || 'unknown';\nconst action = al.action || d.action || 'alerted';\nconst ruleId = String(r.id || '');\nconst agentId = String(a.id || '');\nconst KIB = 'https://10.3.11.40:5601';\nconst filters = \"(key:!(\\'rule.id\\'),meta:(index:\\'wazuh-alerts-4.x-*\\',key:\\'rule.id\\',value:\\'\" + ruleId + \"\\',type:phrase),query:(match_phrase:(\\'rule.id\\':\\'\" + ruleId + \"\\')))\";\nconst disc = \"_a=(columns:!(rule.id,data.srcip,rule.description),filters:!(\" + filters + \"),index:%27[wazuh-alerts-4.x-]*%27,interval:auto,query:(language:kuery,query:%27%27),time:(from:now-24h,to:now)),_g=(time:(from:now-24h,to:now))\";\nconst kibanaAlertUrl = KIB + '/app/discover#/?' + disc;\nconst agentUrl = KIB + '/app/wazuh#/agents-preview/overview/' + (agentId || '');\nconst n8nRunUrl = 'http://10.3.11.40:5678/workflow/3x3QqoFaHDcxnI0c/executions';\nreturn [{ json: {\n  alert: raw, ruleId,\n  ruleLevel: r.level || 0,\n  agentId, agentName: a.name || 'unknown',\n  srcIp, dstIp, dstPort, sig, action,\n  kibanaAlertUrl, agentUrl, n8nRunUrl,\n  isCritical: (r.level || 0) >= 13\n}}];"
    },
    "name": "Filter and Enrich",
    "type": "n8n-nodes-base.code",
@@ -66,10 +72,54 @@
   {
    "parameters": {
     "chatId": "-1004301734497",
-    "text": "={{ '\ud83d\udd34 <b>[SURICATA IPS ALERT]</b>\\n' + '<b>Type:</b> ' + ($json.ruleId === '100170' ? 'PACKET DROP (NFQUEUE)' : 'HOST AUTO-BLOCK (AR)') + '\\n' + '<b>Rule ID:</b> ' + $json.ruleId + ' (Level ' + $json.ruleLevel + ')' + '\\n' + '<b>Agent:</b> ' + $json.agentName + '\\n' + '<b>Attacker:</b> <code>' + $json.srcIp + '</code>\\n' + '<b>Target:</b> <code>' + $json.dstIp + ':' + $json.dstPort + '</code>\\n' + '<b>Signature:</b> ' + $json.sig + '\\n' + '<b>Action:</b> ' + $json.action  + '\\n\\n<b>Quick Links:</b>\\n' + '\u2022 <a href=\"https://10.3.11.40:5601/app/wazuh\">\ud83d\udee1 Wazuh Dashboard</a>\\n' + '\u2022 <a href=\"http://10.3.11.40:5678/executions\">\ud83d\udcca n8n Executions</a>' }}",
+    "text": "={{ '🛑 <b>SURICATA IPS ALERT</b>\\n' + '━━━━━━━━━━━━━━━━━━\\n' + '<b>Type:</b> ' + ($json.ruleId === '100170' ? '🚫 PACKET DROP' : '⛔ HOST AUTO-BLOCK') + '\\n' + '<b>Rule:</b> ' + $json.ruleId + '  ·  <b>Lvl</b> ' + $json.ruleLevel + '  ·  <b>' + $json.action.toUpperCase() + '</b>\\n\\n' + '<b>🖥 Agent</b> ' + $json.agentName + '  <code>#' + $json.agentId + '</code>\\n' + '<b>🔴 Attacker</b> <code>' + $json.srcIp + '</code>\\n' + '<b>🎯 Target</b> <code>' + $json.dstIp + ':' + $json.dstPort + '</code>\\n\\n' + '<b>📄 Signature</b>\\n' + String($json.sig).substring(0, 120) }}",
     "additionalFields": {
      "disable_web_page_preview": true,
-     "parse_mode": "HTML"
+     "parse_mode": "HTML",
+     "appendAttribution": false
+    },
+    "resource": "message",
+    "operation": "sendMessage",
+    "replyMarkup": "inlineKeyboard",
+    "inlineKeyboard": {
+     "rows": [
+      {
+       "row": {
+        "buttons": [
+         {
+          "text": "🔎 Alert in Kibana",
+          "additionalFields": {
+           "url": "={{ $json.kibanaAlertUrl }}"
+          }
+         },
+         {
+          "text": "🖥 Agent View",
+          "additionalFields": {
+           "url": "={{ $json.agentUrl }}"
+          }
+         }
+        ]
+       }
+      },
+      {
+       "row": {
+        "buttons": [
+         {
+          "text": "🛡 Wazuh Dashboard",
+          "additionalFields": {
+           "url": "https://10.3.11.40:5601/app/wazuh"
+          }
+         },
+         {
+          "text": "⚙️ n8n Workflow",
+          "additionalFields": {
+           "url": "={{ $json.n8nRunUrl }}"
+          }
+         }
+        ]
+       }
+      }
+     ]
     }
    },
    "name": "Telegram Alert",
@@ -182,8 +232,304 @@
    ]
   }
  },
+ "nodeGroups": [],
  "settings": {
   "executionOrder": "v1",
   "binaryMode": "separate"
+ },
+ "staticData": {
+  "global": {
+   "dedupe": {
+    "N/A_": 1789210277786,
+    "203.0.113.245_100170": 1789211406400,
+    "203.0.113.150_100170": 1789217832545,
+    "198.51.100.233_100170": 1789219324445,
+    "203.0.113.199_100170": 1789221196911,
+    "203.0.113.212_100170": 1789222822214
+   }
+  }
+ },
+ "shared": [
+  {
+   "role": "workflow:owner",
+   "workflowId": "3x3QqoFaHDcxnI0c",
+   "projectId": "Olt2P9CQxT2YcCnA",
+   "project": {
+    "id": "Olt2P9CQxT2YcCnA",
+    "name": "agb communication <cyberadmin@agb.mywire.org>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "6e1b94bb-5ea5-44dd-b875-b3fb528c2969",
+    "createdAt": "2026-08-24T06:04:04.477Z",
+    "updatedAt": "2026-08-24T06:51:54.656Z"
+   },
+   "createdAt": "2026-09-12T01:37:28.519Z",
+   "updatedAt": "2026-09-12T01:37:28.519Z"
+  }
+ ],
+ "activeVersion": {
+  "versionId": "2e3690cc-be28-47c2-bb1c-02750874eba6",
+  "workflowId": "3x3QqoFaHDcxnI0c",
+  "nodes": [
+   {
+    "parameters": {
+     "httpMethod": "POST",
+     "path": "suricata-soc",
+     "options": {}
+    },
+    "name": "Webhook",
+    "type": "n8n-nodes-base.webhook",
+    "typeVersion": 1,
+    "position": [
+     240,
+     304
+    ],
+    "webhookId": "suricata-soc",
+    "id": "87b72f45-2bc1-4966-9fda-629bc5560558"
+   },
+   {
+    "parameters": {
+     "jsCode": "const wrapper = $input.first().json;\nconst raw = wrapper.body && wrapper.body.rule ? wrapper.body : wrapper;\nconst a = raw.agent || {};\nconst r = raw.rule || {};\nconst d = raw.data || {};\nconst al = d.alert || raw.alert || {};\nconst srcIp = d.srcip || al.src_ip || 'N/A';\nconst dstIp = d.dstip || al.dest_ip || 'N/A';\nconst dstPort = (d.dstport || al.dest_port || 'N/A').toString();\nconst sig = al.signature || raw.description || r.description || 'unknown';\nconst action = al.action || d.action || 'alerted';\nconst ruleId = String(r.id || '');\nconst agentId = String(a.id || '');\nconst KIB = 'https://10.3.11.40:5601';\nconst filters = \"(key:!(\\'rule.id\\'),meta:(index:\\'wazuh-alerts-4.x-*\\',key:\\'rule.id\\',value:\\'\" + ruleId + \"\\',type:phrase),query:(match_phrase:(\\'rule.id\\':\\'\" + ruleId + \"\\')))\";\nconst disc = \"_a=(columns:!(rule.id,data.srcip,rule.description),filters:!(\" + filters + \"),index:%27[wazuh-alerts-4.x-]*%27,interval:auto,query:(language:kuery,query:%27%27),time:(from:now-24h,to:now)),_g=(time:(from:now-24h,to:now))\";\nconst kibanaAlertUrl = KIB + '/app/discover#/?' + disc;\nconst agentUrl = KIB + '/app/wazuh#/agents-preview/overview/' + (agentId || '');\nconst n8nRunUrl = 'http://10.3.11.40:5678/workflow/3x3QqoFaHDcxnI0c/executions';\nreturn [{ json: {\n  alert: raw, ruleId,\n  ruleLevel: r.level || 0,\n  agentId, agentName: a.name || 'unknown',\n  srcIp, dstIp, dstPort, sig, action,\n  kibanaAlertUrl, agentUrl, n8nRunUrl,\n  isCritical: (r.level || 0) >= 13\n}}];"
+    },
+    "name": "Filter and Enrich",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     464,
+     304
+    ],
+    "id": "50ec5c88-217a-447c-885f-509fdb4d6471"
+   },
+   {
+    "parameters": {
+     "jsCode": "const item = $input.first().json;\nconst key = `${item.srcIp}_${item.ruleId}`;\nconst now = Date.now();\n\nconst staticData = $getWorkflowStaticData('global');\nstaticData.dedupe = staticData.dedupe || {};\n\nconst lastSeen = staticData.dedupe[key];\n// Dedupe for 24 hours (86400000 ms)\nif (lastSeen && (now - lastSeen < 86400000)) {\n  return [];\n}\n\nstaticData.dedupe[key] = now;\nreturn [{ json: item }];"
+    },
+    "name": "24h Dedupe",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     688,
+     304
+    ],
+    "id": "877038b1-36a3-42f5-ac1e-6201aba2e27e"
+   },
+   {
+    "parameters": {
+     "conditions": {
+      "boolean": [
+       {
+        "value1": "={{ $json.isCritical }}",
+        "value2": true
+       }
+      ]
+     }
+    },
+    "name": "Severity Gate",
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 1,
+    "position": [
+     912,
+     304
+    ],
+    "id": "9b07e599-f020-41de-88d2-c94c647d0ce0"
+   },
+   {
+    "parameters": {
+     "chatId": "-1004301734497",
+     "text": "={{ '🛑 <b>SURICATA IPS ALERT</b>\\n' + '━━━━━━━━━━━━━━━━━━\\n' + '<b>Type:</b> ' + ($json.ruleId === '100170' ? '🚫 PACKET DROP' : '⛔ HOST AUTO-BLOCK') + '\\n' + '<b>Rule:</b> ' + $json.ruleId + '  ·  <b>Lvl</b> ' + $json.ruleLevel + '  ·  <b>' + $json.action.toUpperCase() + '</b>\\n\\n' + '<b>🖥 Agent</b> ' + $json.agentName + '  <code>#' + $json.agentId + '</code>\\n' + '<b>🔴 Attacker</b> <code>' + $json.srcIp + '</code>\\n' + '<b>🎯 Target</b> <code>' + $json.dstIp + ':' + $json.dstPort + '</code>\\n\\n' + '<b>📄 Signature</b>\\n' + String($json.sig).substring(0, 120) }}",
+     "additionalFields": {
+      "disable_web_page_preview": true,
+      "parse_mode": "HTML",
+      "appendAttribution": false
+     },
+     "resource": "message",
+     "operation": "sendMessage",
+     "replyMarkup": "inlineKeyboard",
+     "inlineKeyboard": {
+      "rows": [
+       {
+        "row": {
+         "buttons": [
+          {
+           "text": "🔎 Alert in Kibana",
+           "additionalFields": {
+            "url": "={{ $json.kibanaAlertUrl }}"
+           }
+          },
+          {
+           "text": "🖥 Agent View",
+           "additionalFields": {
+            "url": "={{ $json.agentUrl }}"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "row": {
+         "buttons": [
+          {
+           "text": "🛡 Wazuh Dashboard",
+           "additionalFields": {
+            "url": "https://10.3.11.40:5601/app/wazuh"
+           }
+          },
+          {
+           "text": "⚙️ n8n Workflow",
+           "additionalFields": {
+            "url": "={{ $json.n8nRunUrl }}"
+           }
+          }
+         ]
+        }
+       }
+      ]
+     }
+    },
+    "name": "Telegram Alert",
+    "type": "n8n-nodes-base.telegram",
+    "typeVersion": 1,
+    "position": [
+     1120,
+     208
+    ],
+    "id": "a5e66c53-350e-4529-b620-2833f715a5e2",
+    "webhookId": "8fc5f174-0feb-4f36-87ab-18a73229f58c",
+    "credentials": {
+     "telegramApi": {
+      "id": "eCt4h9eYogj45d07",
+      "name": "Telegram account"
+     }
+    },
+    "onError": "continueRegularOutput"
+   },
+   {
+    "parameters": {
+     "dataTableId": {
+      "__rl": true,
+      "mode": "id",
+      "value": "0ARlCwjbJIHA8E2Q"
+     },
+     "columns": {
+      "mappingMode": "defineBelow",
+      "value": {
+       "timestamp": "={{ $json.alert.timestamp || $json.alert.rule?.description ? new Date().toISOString() : '' }}",
+       "rule_id": "={{ $json.ruleId }}",
+       "rule_level": "={{ $json.ruleLevel }}",
+       "agent_name": "={{ $json.agentName }}",
+       "src_ip": "={{ $json.srcIp }}",
+       "dst_ip": "={{ $json.dstIp }}",
+       "dst_port": "={{ String($json.dstPort) }}",
+       "signature": "={{ $json.sig }}",
+       "action": "={{ $json.action }}",
+       "created_at": "={{ new Date().toISOString() }}"
+      },
+      "matchingColumns": [],
+      "schema": []
+     },
+     "options": {}
+    },
+    "name": "Log to Events Table",
+    "type": "n8n-nodes-base.dataTable",
+    "typeVersion": 1,
+    "position": [
+     912,
+     480
+    ],
+    "id": "4fc55d2d-9c70-42c7-b9d5-2a94bc2a5d6c",
+    "onError": "continueRegularOutput"
+   }
+  ],
+  "connections": {
+   "Webhook": {
+    "main": [
+     [
+      {
+       "node": "Filter and Enrich",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Filter and Enrich": {
+    "main": [
+     [
+      {
+       "node": "24h Dedupe",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "24h Dedupe": {
+    "main": [
+     [
+      {
+       "node": "Severity Gate",
+       "type": "main",
+       "index": 0
+      },
+      {
+       "node": "Log to Events Table",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Severity Gate": {
+    "main": [
+     [
+      {
+       "node": "Telegram Alert",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Log to Events Table": {
+    "main": [
+     []
+    ]
+   }
+  },
+  "nodeGroups": [],
+  "authors": "agb communication",
+  "name": null,
+  "description": null,
+  "autosaved": false,
+  "createdAt": "2026-09-12T14:07:21.029Z",
+  "updatedAt": "2026-09-12T14:07:21.029Z",
+  "workflowPublishHistory": [
+   {
+    "id": 233,
+    "workflowId": "3x3QqoFaHDcxnI0c",
+    "versionId": "2e3690cc-be28-47c2-bb1c-02750874eba6",
+    "event": "activated",
+    "userId": "6e1b94bb-5ea5-44dd-b875-b3fb528c2969",
+    "createdAt": "2026-09-12T14:07:21.205Z"
+   },
+   {
+    "id": 235,
+    "workflowId": "3x3QqoFaHDcxnI0c",
+    "versionId": "2e3690cc-be28-47c2-bb1c-02750874eba6",
+    "event": "activated",
+    "userId": "6e1b94bb-5ea5-44dd-b875-b3fb528c2969",
+    "createdAt": "2026-09-12T14:07:21.511Z"
+   },
+   {
+    "id": 234,
+    "workflowId": "3x3QqoFaHDcxnI0c",
+    "versionId": "2e3690cc-be28-47c2-bb1c-02750874eba6",
+    "event": "deactivated",
+    "userId": "6e1b94bb-5ea5-44dd-b875-b3fb528c2969",
+    "createdAt": "2026-09-12T14:07:21.413Z"
+   }
+  ]
  }
 }
