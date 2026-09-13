@@ -214,7 +214,7 @@
   },
   {
    "parameters": {
-    "jsCode": "// same-day guard: today's ledger row with status 'sent' -> emit 0 items (flow stops)\nconst today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Yangon' });\nconst res = await this.helpers.httpRequest({\n  url: 'http://127.0.0.1:5678/api/v1/data-tables/ryM0V3Lm7leKYpo7/rows?filter=' +\n       encodeURIComponent(JSON.stringify({ \"digest_date\": { \"$eq\": today } })),\n  headers: { 'X-N8N-API-KEY': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2ZTFiOTRiYi01ZWE1LTQ0ZGQtYjg3NS1iM2ZiNTI4YzI5NjkiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiNDc2NDcyM2QtYmYxZC00OTdmLWI2ZTktYTk2MmZjNTI4ZDZmIiwiaWF0IjoxNzg3NTUxNTkyfQ.TsXcTkiwd07uMWVZm5CI-QWRSKoC2-tZMek_uKD__Wo' },\n  json: true\n});\nconst rows = res.data || [];\nif (rows.some(r => ((r.data || r).status) === 'sent')) {\n  console.log('digest already sent today — skipping');\n  return [];\n}\nreturn [{ json: { today } }];"
+    "jsCode": "// same-day guard: today's ledger row with status 'sent' -> emit 0 items (flow stops)\nconst today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Yangon' });\nconst res = await this.helpers.httpRequest({\n  url: 'http://127.0.0.1:5678/api/v1/data-tables/ryM0V3Lm7leKYpo7/rows?filter=' +\n       encodeURIComponent(JSON.stringify({ \"digest_date\": { \"$eq\": today } })),\n  headers: { 'X-N8N-API-KEY': '[REVOKED-SEE-SKILL-NOTE]' },\n  json: true\n});\nconst rows = res.data || [];\nif (rows.some(r => ((r.data || r).status) === 'sent')) {\n  console.log('digest already sent today — skipping');\n  return [];\n}\nreturn [{ json: { today } }];"
    },
    "name": "Ledger Check",
    "type": "n8n-nodes-base.code",
@@ -518,7 +518,7 @@
      300
     ],
     "parameters": {
-     "jsCode": "// same-day guard: today's ledger row with status 'sent' -> emit 0 items (flow stops)\nconst today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Yangon' });\nconst res = await this.helpers.httpRequest({\n  url: 'http://127.0.0.1:5678/api/v1/data-tables/ryM0V3Lm7leKYpo7/rows?filter=' +\n       encodeURIComponent(JSON.stringify({ \"digest_date\": { \"$eq\": today } })),\n  headers: { 'X-N8N-API-KEY': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2ZTFiOTRiYi01ZWE1LTQ0ZGQtYjg3NS1iM2ZiNTI4YzI5NjkiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiNDc2NDcyM2QtYmYxZC00OTdmLWI2ZTktYTk2MmZjNTI4ZDZmIiwiaWF0IjoxNzg3NTUxNTkyfQ.TsXcTkiwd07uMWVZm5CI-QWRSKoC2-tZMek_uKD__Wo' },\n  json: true\n});\nconst rows = res.data || [];\nif (rows.some(r => ((r.data || r).status) === 'sent')) {\n  console.log('digest already sent today — skipping');\n  return [];\n}\nreturn [{ json: { today } }];"
+     "jsCode": "// same-day guard: today's ledger row with status 'sent' -> emit 0 items (flow stops)\nconst today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Yangon' });\nconst res = await this.helpers.httpRequest({\n  url: 'http://127.0.0.1:5678/api/v1/data-tables/ryM0V3Lm7leKYpo7/rows?filter=' +\n       encodeURIComponent(JSON.stringify({ \"digest_date\": { \"$eq\": today } })),\n  headers: { 'X-N8N-API-KEY': '[REVOKED-SEE-SKILL-NOTE]' },\n  json: true\n});\nconst rows = res.data || [];\nif (rows.some(r => ((r.data || r).status) === 'sent')) {\n  console.log('digest already sent today — skipping');\n  return [];\n}\nreturn [{ json: { today } }];"
     },
     "id": "799e3879-f3ed-4ef4-a2c4-03db7e60b7f6"
    }
