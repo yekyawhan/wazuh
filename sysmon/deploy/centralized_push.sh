@@ -9,7 +9,7 @@ set -e
 
 SIEM1_HOST="172.16.10.2"
 SIEM1_USER="ykh"
-SIEM1_PASS="ykhster"
+SIEM1_PASS="${SIEM1_PASS:-}"  # Set via env or prompt
 CONFIG_SOURCE="/home/y3kh/.claude/my-project/wazuh/sysmon/config/custom-sysmon-tuned.xml"
 GROUP_NAME="windows_sysmon_tuned"
 

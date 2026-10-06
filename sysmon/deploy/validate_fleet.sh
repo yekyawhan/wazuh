@@ -6,7 +6,7 @@ set -e
 
 SIEM1_HOST="172.16.10.2"
 SIEM1_USER="ykh"
-SIEM1_PASS="ykhster"
+SIEM1_PASS="${SIEM1_PASS:-}"  # Set via env or prompt
 GROUP_NAME="windows_sysmon_tuned"
 CONFIG_SOURCE="/home/y3kh/.claude/my-project/wazuh/sysmon/config/custom-sysmon-tuned.xml"
 
@@ -52,7 +52,7 @@ EOSSH
 # Also query ES for recent Sysmon events from these agents (last 1h)
 echo "=== Recent Sysmon Events from Group Agents (last 1h) ==="
 sshpass -p "$SIEM1_PASS" ssh -o StrictHostKeyChecking=no "$SIEM1_USER@$SIEM1_HOST" "
-curl -s -k -u 'admin:Cybersoc*3' 'https://localhost:9200/wazuh-alerts-*/_search' \
+curl -s -k -u 'admin:<REDACTED>' 'https://localhost:9200/wazuh-alerts-*/_search' \
 -H 'Content-Type: application/json' -d '{
   \"size\": 0,
   \"query\": {

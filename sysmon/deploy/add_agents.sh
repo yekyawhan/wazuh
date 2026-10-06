@@ -6,7 +6,7 @@ set -e
 
 SIEM1_HOST="172.16.10.2"
 SIEM1_USER="ykh"
-SIEM1_PASS="ykhster"
+SIEM1_PASS="${SIEM1_PASS:-}"  # Set via env or prompt
 GROUP_NAME="windows_sysmon_tuned"
 
 if [ $# -eq 0 ]; then

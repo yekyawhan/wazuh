@@ -253,7 +253,7 @@ Before/after comparison (24h window):
 ```bash
 # EID 1 count per agent
 ssh ykh@172.16.10.2 "
-curl -s -k -u 'admin:Cybersoc*3' 'https://localhost:9200/wazuh-alerts-*/_search' -H 'Content-Type: application/json' -d '{
+curl -s -k -u 'admin:<REDACTED>' 'https://localhost:9200/wazuh-alerts-*/_search' -H 'Content-Type: application/json' -d '{
   \"size\": 0,
   \"query\": {
     \"bool\": {
@@ -272,8 +272,8 @@ Expected reduction: ~60% (110k → 44k EID1/day)
 
 ## Credentials
 
-- **Siem1 SSH:** `ykh` / `ykhster`
-- **Siem1 ES:** `admin` / `Cybersoc*3`
+- **Siem1 SSH:** `ykh` / `<SSH_PASSWORD>`
+- **Siem1 ES:** `admin` / `<REDACTED>`
 - **Scripts location:** `/home/y3kh/.claude/my-project/wazuh/sysmon/deploy/`
 
 ## References
