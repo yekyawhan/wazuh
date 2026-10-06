@@ -1,95 +1,152 @@
-<Sysmon schemaversion="4.90">
-
-  <!-- ======================================
-       SOC Production Tuned Sysmon Config
-       (Noise Reduced + SIEM Friendly)
-  ======================================= -->
-
+<Sysmon schemaversion="4.50">
+  <!-- SOC Tuned (fixed): noise reduced, upstream-compatible logic. Requires Sysmon 13+ -->
   <HashAlgorithms>sha256</HashAlgorithms>
-  <CheckRevocation>true</CheckRevocation>
+  <CheckRevocation/>
 
   <EventFiltering>
 
-    <!-- =========================
-         1. PROCESS CREATION (HIGH VALUE)
-         Event ID 1
-    ========================== -->
-    <ProcessCreate onmatch="include">
+    <!-- ID 1: log everything, exclude only known-noisy Windows processes -->
+    <RuleGroup name="" groupRelation="or">
+      <ProcessCreate onmatch="exclude">
+        <Image condition="is">C:\Windows\system32\conhost.exe</Image>
+        <Image condition="is">C:\Windows\system32\audiodg.exe</Image>
+        <Image condition="is">C:\Windows\system32\CompatTelRunner.exe</Image>
+        <CommandLine condition="begin with">C:\Windows\system32\DllHost.exe /Processid</CommandLine>
+        <CommandLine condition="begin with">C:\Windows\system32\wbem\wmiprvse.exe -Embedding</CommandLine>
+        <CommandLine condition="begin with">"C:\Program Files\Google\Chrome\Application\chrome.exe" --type=</CommandLine>
+        <CommandLine condition="begin with">"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" --type=</CommandLine>
+      </ProcessCreate>
+    </RuleGroup>
 
-      <!-- Include all processes -->
-      <Image condition="is">*</Image>
+    <!-- ID 3: only attack-relevant network activity -->
+    <RuleGroup name="" groupRelation="or">
+      <NetworkConnect onmatch="include">
+        <Image name="Usermode" condition="begin with">C:\Users</Image>
+        <Image name="Suspicious" condition="begin with">C:\ProgramData</Image>
+        <Image name="Suspicious" condition="begin with">C:\Windows\Temp</Image>
+        <Image condition="image">powershell.exe</Image>
+        <Image condition="image">cmd.exe</Image>
+        <Image condition="image">certutil.exe</Image>
+        <Image condition="image">bitsadmin.exe</Image>
+        <Image condition="image">mshta.exe</Image>
+        <Image condition="image">rundll32.exe</Image>
+        <Image condition="image">regsvr32.exe</Image>
+        <Image condition="image">wscript.exe</Image>
+        <Image condition="image">cscript.exe</Image>
+        <Image condition="image">msiexec.exe</Image>
+        <Image condition="image">psexec.exe</Image>
+        <Image condition="image">nc.exe</Image>
+        <Image condition="image">ncat.exe</Image>
+        <DestinationPort name="RDP" condition="is">3389</DestinationPort>
+        <DestinationPort name="SSH" condition="is">22</DestinationPort>
+        <DestinationPort name="Telnet" condition="is">23</DestinationPort>
+        <DestinationPort name="Metasploit" condition="is">4444</DestinationPort>
+      </NetworkConnect>
+    </RuleGroup>
+    <RuleGroup name="" groupRelation="or">
+      <NetworkConnect onmatch="exclude">
+        <DestinationIp condition="is">127.0.0.1</DestinationIp>
+        <DestinationHostname condition="end with">.microsoft.com</DestinationHostname>
+      </NetworkConnect>
+    </RuleGroup>
 
-      <!-- EXCLUSIONS (Noise reduction) -->
-      <Image condition="contains">\Windows\System32\</Image>
-      <Image condition="contains">\Windows\SysWOW64\</Image>
-    </ProcessCreate>
+    <!-- ID 6: all drivers except Microsoft/Windows signed -->
+    <RuleGroup name="" groupRelation="or">
+      <DriverLoad onmatch="exclude">
+        <Signature condition="contains">microsoft</Signature>
+        <Signature condition="contains">windows</Signature>
+      </DriverLoad>
+    </RuleGroup>
 
-    <!-- =========================
-         2. NETWORK CONNECTIONS (ATTACK RELEVANT)
-         Event ID 3
-    ========================== -->
-    <NetworkConnect onmatch="include">
+    <!-- ID 7: OFF (include with no rules = nothing logged) -->
+    <RuleGroup name="" groupRelation="or">
+      <ImageLoad onmatch="include"></ImageLoad>
+    </RuleGroup>
 
-      <!-- Exclude local noise -->
-      <Image condition="contains">\Windows\System32\</Image>
-      <Image condition="contains">\Microsoft\</Image>
+    <!-- ID 8: remote thread injection, exclude mostly-safe sources -->
+    <RuleGroup name="" groupRelation="or">
+      <CreateRemoteThread onmatch="exclude">
+        <SourceImage condition="is">C:\Windows\system32\wbem\WmiPrvSE.exe</SourceImage>
+        <SourceImage condition="is">C:\Windows\system32\svchost.exe</SourceImage>
+        <SourceImage condition="is">C:\Windows\system32\csrss.exe</SourceImage>
+        <SourceImage condition="is">C:\Windows\system32\services.exe</SourceImage>
+        <SourceImage condition="is">C:\Windows\system32\winlogon.exe</SourceImage>
+      </CreateRemoteThread>
+    </RuleGroup>
 
-    </NetworkConnect>
+    <!-- ID 9: OFF -->
+    <RuleGroup name="" groupRelation="or">
+      <RawAccessRead onmatch="include"></RawAccessRead>
+    </RuleGroup>
 
-    <!-- =========================
-         3. FILE CREATION (LIMITED)
-         Event ID 11
-    ========================== -->
-    <FileCreate onmatch="include">
+    <!-- ID 11: dropped executables/scripts + staging locations -->
+    <RuleGroup name="" groupRelation="or">
+      <FileCreate onmatch="include">
+        <TargetFilename name="Startup" condition="contains">\Startup\</TargetFilename>
+        <TargetFilename name="Downloads" condition="contains">\Downloads\</TargetFilename>
+        <TargetFilename condition="end with">.exe</TargetFilename>
+        <TargetFilename condition="end with">.dll</TargetFilename>
+        <TargetFilename condition="end with">.sys</TargetFilename>
+        <TargetFilename condition="end with">.ps1</TargetFilename>
+        <TargetFilename condition="end with">.bat</TargetFilename>
+        <TargetFilename condition="end with">.cmd</TargetFilename>
+        <TargetFilename condition="end with">.vbs</TargetFilename>
+        <TargetFilename condition="end with">.hta</TargetFilename>
+        <TargetFilename condition="end with">.docm</TargetFilename>
+        <TargetFilename condition="end with">.xlsm</TargetFilename>
+        <TargetFilename name="ScheduledTask" condition="begin with">C:\Windows\system32\Tasks</TargetFilename>
+      </FileCreate>
+    </RuleGroup>
+    <RuleGroup name="" groupRelation="or">
+      <FileCreate onmatch="exclude">
+        <TargetFilename condition="begin with">C:\Windows\Installer\</TargetFilename>
+        <TargetFilename condition="begin with">C:\Windows\winsxs\</TargetFilename>
+        <Image condition="is">C:\Windows\system32\smss.exe</Image>
+      </FileCreate>
+    </RuleGroup>
 
-      <!-- Focus suspicious locations -->
-      <TargetFilename condition="contains">\Temp\</TargetFilename>
-      <TargetFilename condition="contains">\Downloads\</TargetFilename>
-      <TargetFilename condition="contains">\AppData\</TargetFilename>
+    <!-- ID 12/13/14: persistence + tampering -->
+    <RuleGroup name="" groupRelation="or">
+      <RegistryEvent onmatch="include">
+        <TargetObject name="RunKey" condition="contains">CurrentVersion\Run</TargetObject>
+        <TargetObject name="Winlogon" condition="contains">CurrentVersion\Winlogon\</TargetObject>
+        <TargetObject name="IFEO" condition="contains">Image File Execution Options\</TargetObject>
+        <TargetObject name="Service" condition="end with">\ImagePath</TargetObject>
+        <TargetObject name="Service" condition="end with">\ServiceDll</TargetObject>
+        <TargetObject name="RDP" condition="end with">fDenyTSConnections</TargetObject>
+        <TargetObject name="Tamper-Defender" condition="end with">DisableAntiSpyware</TargetObject>
+        <TargetObject name="Tamper-Defender" condition="end with">DisableRealtimeMonitoring</TargetObject>
+        <TargetObject name="Tamper-Defender" condition="contains">Windows Defender\Exclusions\</TargetObject>
+        <TargetObject name="Tamper-Firewall" condition="end with">\EnableFirewall</TargetObject>
+        <TargetObject name="UAC" condition="end with">\EnableLUA</TargetObject>
+        <TargetObject name="LSA" condition="begin with">HKLM\SYSTEM\CurrentControlSet\Control\Lsa\</TargetObject>
+        <TargetObject name="COM-Hijack" condition="end with">\InprocServer32\(Default)</TargetObject>
+      </RegistryEvent>
+    </RuleGroup>
+    <RuleGroup name="" groupRelation="or">
+      <RegistryEvent onmatch="exclude">
+        <EventType condition="is">CreateKey</EventType>
+        <TargetObject condition="end with">HKLM\SYSTEM\CurrentControlSet\Control\Lsa\LsaPid</TargetObject>
+        <TargetObject condition="end with">HKLM\SYSTEM\CurrentControlSet\Control\Lsa\SspiCache</TargetObject>
+      </RegistryEvent>
+    </RuleGroup>
 
-    </FileCreate>
+    <!-- ID 17/18: C2 / lateral movement named pipes -->
+    <RuleGroup name="" groupRelation="or">
+      <PipeEvent onmatch="include">
+        <PipeName condition="contains any">paexec;remcom;csexec;\lsadump;\cachedump;\wceservicepipe</PipeName>
+        <PipeName condition="contains all">MSSE-;-server</PipeName>
+        <PipeName condition="begin with">\postex_</PipeName>
+        <PipeName condition="begin with">\msagent_</PipeName>
+      </PipeEvent>
+    </RuleGroup>
 
-    <!-- =========================
-         4. REGISTRY CHANGES (PERSISTENCE)
-         Event ID 12,13,14
-    ========================== -->
-    <RegistryEvent onmatch="include">
+    <!-- ID 19/20/21: WMI persistence (log everything) -->
+    <RuleGroup name="" groupRelation="or">
+      <WmiEvent onmatch="exclude"></WmiEvent>
+    </RuleGroup>
 
-      <!-- Persistence areas -->
-      <TargetObject condition="contains">\Run</TargetObject>
-      <TargetObject condition="contains">\RunOnce</TargetObject>
-      <TargetObject condition="contains">\Services</TargetObject>
-      <TargetObject condition="contains">\CurrentVersion\Run</TargetObject>
-
-    </RegistryEvent>
-
-    <!-- =========================
-         5. IMAGE LOAD (LIMITED)
-         Event ID 7
-    ========================== -->
-    <ImageLoad onmatch="exclude">
-
-      <!-- Reduce noise from Windows DLLs -->
-      <Image condition="contains">\Windows\System32\</Image>
-      <Image condition="contains">\Windows\SysWOW64\</Image>
-
-    </ImageLoad>
-
-    <!-- =========================
-         6. DRIVER LOAD (HIGH RISK)
-         Event ID 6
-    ========================== -->
-    <DriverLoad onmatch="include">
-      <Image condition="is">*</Image>
-    </DriverLoad>
-
-    <!-- =========================
-         7. RAW ACCESS READ (OPTIONAL HIGH RISK)
-    ========================== -->
-    <RawAccessRead onmatch="include">
-      <Image condition="is">*</Image>
-    </RawAccessRead>
+    <!-- ID 22 DNS: intentionally omitted (noise) -->
 
   </EventFiltering>
-
 </Sysmon>
