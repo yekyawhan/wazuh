@@ -1,5 +1,5 @@
 #requires -RunAsAdministrator
-[CmdletBinding(SupportsShouldProcess)]
+[CmdletBinding()]
 param()
 
 $ErrorActionPreference = "Stop"
@@ -31,14 +31,14 @@ if ($Service) {
         & $SysmonExe -u
         $ExitCode = $LASTEXITCODE
 
+        # Sysmon can return success while leaving the executable in C:\Windows
+        # because the uninstall process may still hold the file briefly.
         if ($ExitCode -ne 0) {
             throw "Sysmon uninstall failed. ExitCode=$ExitCode"
         }
     }
     else {
-        Write-Warning "Sysmon64 service exists but Sysmon executable was not found."
-        Write-Warning "Attempting service stop/removal is skipped to avoid unsafe manual driver/service cleanup."
-        throw "Sysmon executable not found while Sysmon64 service exists."
+        throw "Sysmon64 service exists but Sysmon executable was not found."
     }
 }
 else {
@@ -53,38 +53,56 @@ if ($RemainingService) {
     throw "Sysmon64 service still exists after uninstall."
 }
 
-# Remove only files/directories belonging to this Sysmon deployment.
-$PathsToRemove = @(
-    $SysmonInstallDir,
-    $LegacySysmonExe
-)
+function Remove-PathSafely {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
 
-foreach ($Path in $PathsToRemove) {
-    if (Test-Path -LiteralPath $Path) {
-        if ($PSCmdlet.ShouldProcess($Path, "Remove")) {
-            Remove-Item -LiteralPath $Path -Recurse -Force
-            Write-Host "Removed: $Path"
-        }
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    try {
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+        Write-Host "Removed: $Path"
+        return
+    }
+    catch {
+        Write-Warning "Normal removal failed: $Path"
+        Write-Warning $_.Exception.Message
+    }
+
+    # If Sysmon left a locked executable, schedule deletion after this
+    # PowerShell process exits. This avoids failing the cleanup just because
+    # the uninstall process briefly retains a file handle.
+    if ((Get-Item -LiteralPath $Path -ErrorAction SilentlyContinue) -is [System.IO.FileInfo]) {
+        $DeleteCommand = "Start-Sleep -Seconds 2; Remove-Item -LiteralPath '$Path' -Force -ErrorAction SilentlyContinue"
+        Start-Process -FilePath "powershell.exe" -ArgumentList @(
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle", "Hidden",
+            "-Command", $DeleteCommand
+        ) -WindowStyle Hidden | Out-Null
+
+        Write-Host "Scheduled removal after the current process exits: $Path"
     }
 }
 
-# Remove old local Sysmon configuration files if they exist in the known deployment directory.
-$OldConfigPaths = @(
-    "C:\Program Files (x86)\Sysmon\sysmon-tuned.xml",
-    "C:\Program Files (x86)\Sysmon\custom-sysmon-tuned.xml"
+# Remove Sysmon files/directories from all known deployment locations.
+$PathsToRemove = @(
+    $SysmonInstallDir,
+    $LegacySysmonExe,
+    "C:\Windows\Sysmon64.exe",
+    "C:\Windows\Sysmon.exe"
 )
 
-foreach ($Config in $OldConfigPaths) {
-    if (Test-Path -LiteralPath $Config) {
-        if ($PSCmdlet.ShouldProcess($Config, "Remove old Sysmon configuration")) {
-            Remove-Item -LiteralPath $Config -Force
-            Write-Host "Removed old config: $Config"
-        }
-    }
+foreach ($Path in $PathsToRemove) {
+    Remove-PathSafely -Path $Path
 }
 
 Write-Host ""
 Write-Host "Sysmon clean uninstall completed successfully." -ForegroundColor Green
 Write-Host "The Wazuh agent shared configuration was NOT modified."
-Write-Host "The following source file was intentionally preserved:"
+Write-Host "Preserved source:"
 Write-Host "C:\Program Files (x86)\ossec-agent\shared\custom-sysmon-tuned.xml"
