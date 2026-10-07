@@ -1,7 +1,7 @@
 param(
     [switch]$Uninstall,
     [switch]$ForceReinstall,
-    [string]$configUrl = "https://raw.githubusercontent.com/yekyawhan/wazuh/main/sysmon/config/custom-sysmon-tuned.xml"
+    [string]$configUrl = "https://raw.githubusercontent.com/yekyawhan/wazuh/refs/heads/git-home/sysmon/config/custom-sysmon-tuned.xml"
 )
 
 # =========================
