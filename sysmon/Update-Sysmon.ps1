@@ -81,8 +81,8 @@ function Install-SysmonIfMissing {
 
         Write-UpdateLog -Level "INFO" -Message "Running Sysmon installer."
 
-        $ArgumentList = @("-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File",$InstallerPath)
-        $Process = Start-Process -FilePath "powershell.exe" -ArgumentList $ArgumentList -Wait -PassThru -WindowStyle Hidden
+        $InstallerArguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f $InstallerPath
+        $Process = Start-Process -FilePath "powershell.exe" -ArgumentList $InstallerArguments -Wait -PassThru -WindowStyle Hidden
         $ExitCode = $Process.ExitCode
 
         Write-UpdateLog -Level "INFO" -Message "Sysmon installer exited with code: $ExitCode"
@@ -138,8 +138,9 @@ function Apply-SysmonConfiguration {
     $StdOutFile = Join-Path $OutputDir "sysmon-$Stamp.out.log"
     $StdErrFile = Join-Path $OutputDir "sysmon-$Stamp.err.log"
 
-    $ArgumentList = @("-c",$TargetConfig)
-    $Process = Start-Process -FilePath $SysmonExe -ArgumentList $ArgumentList -WorkingDirectory (Split-Path -Parent $SysmonExe) -RedirectStandardOutput $StdOutFile -RedirectStandardError $StdErrFile -Wait -PassThru -WindowStyle Hidden
+    # Windows PowerShell 5.1 flattens ArgumentList, so quote the config path.
+    $SysmonArguments = '-c "{0}"' -f $TargetConfig
+    $Process = Start-Process -FilePath $SysmonExe -ArgumentList $SysmonArguments -WorkingDirectory (Split-Path -Parent $SysmonExe) -RedirectStandardOutput $StdOutFile -RedirectStandardError $StdErrFile -Wait -PassThru -WindowStyle Hidden
     $ExitCode = $Process.ExitCode
 
     if (Test-Path -LiteralPath $StdOutFile) {
@@ -188,7 +189,7 @@ function Main {
 
     $Service = Get-Service -Name "Sysmon64" -ErrorAction Stop
     Write-UpdateLog -Level "SUCCESS" -Message "Sysmon64 service verification successful. Status=$($Service.Status) StartType=$($Service.StartType)"
-    Write-UpdateLog -Level "SUCCESS" -Message "===== Sysmon configuration update completed successfully ====="
+    Write-UpdateLog -Level "SUCCESS" -Message "========== Sysmon configuration update completed successfully =========="
     return 0
 }
 
