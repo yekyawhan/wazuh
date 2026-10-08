@@ -196,7 +196,7 @@ try {
     Install-Sysmon
     Cleanup
 
-    Log "===== Completed Successfully ====="
+    Log "===== Sysmon configuration update completed successfully ====="
     exit 0
 }
 catch {
