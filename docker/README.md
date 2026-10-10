@@ -58,34 +58,15 @@ Unsupported distributions are rejected automatically.
 
 ### Option 1 — One-Line Install
 
-Run the installer directly from GitHub:
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yekyawhan/wazuh/7ec439638595a7d4f26ce232dd142c36c7239348/docker/install-docker.sh | sudo bash
 ```
-
 ### Option 2 — Download and Run
 
-Download the script:
-
 ```bash
-wget https://raw.githubusercontent.com/yekyawhan/wazuh/7ec439638595a7d4f26ce232dd142c36c7239348/docker/install-docker.sh
+wget https://raw.githubusercontent.com/yekyawhan/wazuh/7ec439638595a7d4f26ce232dd142c36c7239348/docker/install-docker.sh && chmod +x install-docker.sh && sudo ./install-docker.sh
 ```
-
-Make it executable:
-
-```bash
-chmod +x install-docker.sh
-```
-
-Run the installer:
-
-```bash
-sudo ./install-docker.sh
-```
-
 ---
-
 ## 🔍 OS Detection
 
 The installer automatically detects the operating system.
