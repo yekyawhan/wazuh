@@ -136,6 +136,29 @@ Set-DefenderPreference -Name 'SubmitSamplesConsent' -Value 3 -SupportedParameter
 # Defender/Windows builds. Do not assume the parameter exists on older builds.
 Set-DefenderPreference -Name 'PerformanceModeStatus' -Value 'Enabled' -SupportedParameters $supported
 
+# ---------------------------------------------------------------------------
+# Tamper Protection auto-enable (best-effort, Layer-0).
+# Implementation lives in enable-tamper-protection.ps1 (shared with the manual
+# audit script). See that file for the registry/ACL details and the
+# policy-managed failure modes.
+# ---------------------------------------------------------------------------
+$tpStatus = Get-DefenderStatus
+$tpAlreadyOn = $false
+if ($tpStatus -and $tpStatus.PSObject.Properties.Name -contains 'IsTamperProtected') {
+    $tpAlreadyOn = [bool]$tpStatus.IsTamperProtected
+}
+if ($tpAlreadyOn) {
+    Write-Log 'TAMPER: IsTamperProtected=True. No action needed.'
+} else {
+    $tpHelper = Join-Path $PSScriptRoot 'enable-tamper-protection.ps1'
+    if (Test-Path $tpHelper) {
+        . $tpHelper
+        [void](Enable-TamperProtectionBestEffort)
+    } else {
+        Write-Log "TAMPER: helper not found at $tpHelper; cannot enable automatically."
+    }
+}
+
 # Bounded verification/retry. Do not return early merely because RTP is on:
 # cloud/sample/Dev Drive settings and Tamper Protection status must be reported.
 $attempt = 0

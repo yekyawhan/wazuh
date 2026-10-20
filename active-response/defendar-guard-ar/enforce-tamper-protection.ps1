@@ -69,25 +69,42 @@ if ($status.IsTamperProtected) {
     Write-Host "[OK] Tamper Protection is ON. Disable attempts will be REJECTED." -ForegroundColor Green
     Write-Log "Tamper Protection ON, RTP=True."
 } else {
-    Write-Host "[WARN] Tamper Protection is OFF. Disable attempts succeed, ~1s re-enable gap." -ForegroundColor Red
-    Write-Log "Tamper Protection OFF. Provide Intune/GPO path to user."
-    Write-Host ""
-    Write-Host "Tamper Protection cannot be enabled by a local script (Microsoft design)." -ForegroundColor Magenta
-    Write-Host "Choose ONE of these paths to enable it:" -ForegroundColor Magenta
-    Write-Host ""
-    Write-Host "  GUI (single machine):" -ForegroundColor Yellow
-    Write-Host "    Windows Security -> Virus & threat protection -> Manage settings"
-    Write-Host "    -> Tamper Protection -> ON"
-    Write-Host ""
-    Write-Host "  Intune (fleet):" -ForegroundColor Yellow
-    Write-Host "    Endpoint security -> Antivirus -> Tamper Protection = Enabled"
-    Write-Host "    See tamper-protection-policy.xml (OMA-URI snippets)."
-    Write-Host ""
-    Write-Host "  GPO (domain-joined fleet):" -ForegroundColor Yellow
-    Write-Host "    Computer\Administrative Templates\Windows Components\"
-    Write-Host "    Microsoft Defender Antivirus\Real-time Protection"
-    Write-Host "      Tamper Protection = Enabled"
-    Write-Host "      Configure real-time protection = Enabled"
+    Write-Host "[WARN] Tamper Protection is OFF. Attempting automatic registry enable (Layer-0)..." -ForegroundColor Yellow
+    Write-Log "Tamper Protection OFF. Attempting registry enable."
+
+    # Same implementation the AR/watcher path uses.
+    $tpHelper = Join-Path $PSScriptRoot 'enable-tamper-protection.ps1'
+    if (Test-Path $tpHelper) {
+        . $tpHelper
+        $wrote = Enable-TamperProtectionBestEffort
+    } else {
+        Write-Host "  [i] helper not found: $tpHelper" -ForegroundColor DarkYellow
+    }
+
+    Start-Sleep -Milliseconds 500
+    $freshStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
+    if ($freshStatus -and $freshStatus.IsTamperProtected) {
+        Write-Host "[SUCCESS] Tamper Protection is now ON." -ForegroundColor Green
+        Write-Log "Tamper Protection confirmed ON."
+    } else {
+        Write-Host "[INFO] Registry write did not flip the state. It may be centrally managed, or pending a Defender platform refresh / reboot." -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "Supported paths to enable it:" -ForegroundColor Magenta
+        Write-Host ""
+        Write-Host "  GUI (single machine):" -ForegroundColor Yellow
+        Write-Host "    Windows Security -> Virus & threat protection -> Manage settings"
+        Write-Host "    -> Tamper Protection -> ON"
+        Write-Host ""
+        Write-Host "  Intune (fleet):" -ForegroundColor Yellow
+        Write-Host "    Endpoint security -> Antivirus -> Tamper Protection = Enabled"
+        Write-Host "    See tamper-protection-policy.xml (OMA-URI snippets)."
+        Write-Host ""
+        Write-Host "  GPO (domain-joined fleet):" -ForegroundColor Yellow
+        Write-Host "    Computer\Administrative Templates\Windows Components\"
+        Write-Host "    Microsoft Defender Antivirus\Real-time Protection"
+        Write-Host "      Tamper Protection = Enabled"
+        Write-Host "      Configure real-time protection = Enabled"
+    }
 }
 
 # 4. Audit recent tamper attempts (last 50 events matching the relevant IDs)

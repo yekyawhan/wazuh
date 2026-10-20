@@ -20,6 +20,16 @@ $binDir = "C:\Program Files (x86)\ossec-agent\active-response\bin"
 $psDir  = "C:\Program Files\Sysinternals"
 
 # ----------------------------------------------------------------------
+# Write-Log
+# enable-tamper-protection.ps1 logs through Write-Log; define it before
+# dot-sourcing that helper.
+# ----------------------------------------------------------------------
+function Write-Log {
+    param([string]$Message)
+    Write-Host ("  [log] {0}" -f $Message) -ForegroundColor DarkGray
+}
+
+# ----------------------------------------------------------------------
 # Guard-NormalizeLineEndings
 # GitHub raw serves LF; normalize to CRLF before the file is run by
 # the scheduler. Cheap text-only read/write.
@@ -177,14 +187,20 @@ if ($cerPath -and (Test-Path $cerPath)) {
 # scripts AND the Wazuh AR wrapper are present before task registration.
 Write-Host "Placing files..." -ForegroundColor Yellow
 $psEvent = Get-Script -Name "reenable-defender.ps1"     -Dir $psDir
+$psTp    = Get-Script -Name "enable-tamper-protection.ps1" -Dir $psDir
 $psSvc   = Get-Script -Name "watchdog-service.ps1"      -Dir $psDir
 $psAudit = Get-Script -Name "enforce-tamper-protection.ps1" -Dir $psDir
 $psXml   = Get-Script -Name "tamper-protection-policy.xml"  -Dir $psDir
 $cmdWrap = Get-Script -Name "reenable-defender.cmd"     -Dir $binDir
 
 # Normalize any pre-existing files so older LF copies self-heal.
-foreach ($p in @($psEvent, $psSvc, $psAudit)) {
+foreach ($p in @($psEvent, $psTp, $psSvc, $psAudit)) {
     if ($p -and (Test-Path $p)) { Guard-NormalizeLineEndings -Path $p }
+}
+# reenable-defender.ps1 dot-sources the TP helper from its own directory; keep
+# the two in the SAME folder or the AR path silently skips the Tamper enable.
+if ($psEvent -and $psTp -and (Split-Path $psEvent) -ne (Split-Path $psTp)) {
+    Write-Host "  [!!] reenable-defender.ps1 and enable-tamper-protection.ps1 are in different folders." -ForegroundColor Red
 }
 
 # Register BOTH tasks. The service-watcher covers every disable path
@@ -232,8 +248,21 @@ try {
     if ($status.IsTamperProtected) {
         Write-Host "  [OK] Tamper Protection is ON -- disable attempts will be REJECTED." -ForegroundColor Green
     } else {
-        Write-Host "  [!!] Tamper Protection is OFF. Disable attempts succeed and the 1s watcher window applies." -ForegroundColor Red
-        Write-Host "       Enable via GUI / Intune / GPO (see tamper-protection-policy.xml)." -ForegroundColor Yellow
+        Write-Host "  [!!] Tamper Protection is OFF. Attempting automatic enable (registry + ACL)..." -ForegroundColor Yellow
+        if ($psTp -and (Test-Path $psTp)) {
+            . $psTp
+            [void](Enable-TamperProtectionBestEffort)
+            Start-Sleep -Milliseconds 500
+            $after = Get-MpComputerStatus -ErrorAction SilentlyContinue
+            if ($after -and $after.IsTamperProtected) {
+                Write-Host "  [OK] Tamper Protection is now ON." -ForegroundColor Green
+            } else {
+                Write-Host "  [i] Registry write did not flip the state (centrally managed, or pending platform refresh/reboot)." -ForegroundColor DarkYellow
+                Write-Host "       Enable via GUI / Intune / GPO (see tamper-protection-policy.xml)." -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "       Enable via GUI / Intune / GPO (see tamper-protection-policy.xml)." -ForegroundColor Yellow
+        }
     }
 
     # Re-enforce preferences immediately (idempotent).
@@ -250,6 +279,7 @@ Write-Host ""
 Write-Host "=== Defender-Guard: install summary ===" -ForegroundColor Cyan
 Write-Host ("  AR wrapper         : {0}\reenable-defender.cmd"           -f $binDir)
 Write-Host ("  AR + standalone    : {0}\reenable-defender.ps1"           -f $psDir)
+Write-Host ("  Tamper auto-enable : {0}\enable-tamper-protection.ps1"    -f $psDir)
 Write-Host ("  Service watchdog   : {0}\watchdog-service.ps1"            -f $psDir)
 Write-Host ("  Tamper enforcer    : {0}\enforce-tamper-protection.ps1"   -f $psDir)
 Write-Host ("  Policy XML         : {0}\tamper-protection-policy.xml"     -f $psDir)

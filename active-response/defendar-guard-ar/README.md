@@ -60,10 +60,10 @@ Restart-Service WazuhSvc   # on agent
 
 | Layer | Component | Reaction | Resource use |
 |-------|-----------|----------|--------------|
-| **0 - prevent** | Tamper Protection ON (Intune/GPO) | **0 ms** — disable is rejected at source | — |
+| **0 - prevent** | Tamper Protection ON (`enable-tamper-protection.ps1`) | **0 ms** — disable is rejected at source | — |
 | **1 - poll** | `Defender-Guard-Service-Watch` (Scheduled Task, 1 s poll) | **≤ 1 s** | ~20 MB RAM, ~0.01 % CPU |
 | **2 - event** | `Defender-Guard-Event-Watch` (Scheduled Task, Event 5001/5010/5012) | **~100 ms** | 0 % CPU at idle |
-| **3 - audit** | Wazuh manager AR (rule 100620) | **a few seconds** | log only |
+| **3 - audit** | Wazuh manager AR (rule 100010) | **a few seconds** | log only |
 
 All four are independent. Layer 0 stops the disable entirely. The rest are belt-and-suspenders coverage in case Tamper ever turns off.
 
@@ -71,8 +71,25 @@ The Wazuh manager AR is reactive (alert → manager → agent). Layer 1 + 2 reac
 
 > **Tamper Protection is the only mechanism that completely eliminates the disable window.**
 > Tamper ON → `Set-MpPreference -DisableRealtimeMonitoring $true` is REJECTED → no re-enable ever needed.
-> It can only be enabled via GUI / Intune / GPO (not by a local script, by Microsoft design).
-> Use `tamper-protection-policy.xml` to ship the policy via Intune or GPO.
+
+### Layer 0 — Tamper Protection auto-enable
+
+`enable-tamper-protection.ps1` turns Tamper Protection ON without the GUI. Run by
+`install.ps1`, by `enforce-tamper-protection.ps1`, and on every AR/watcher run.
+
+State value: `HKLM\SOFTWARE\Microsoft\Windows Defender\Features\TamperProtection`
+(DWORD `5` = ON, `4`/`0` = OFF). While TP is OFF that key is owned by SYSTEM with
+an ACL that denies even elevated admins, so the helper walks an ownership + ACL
+cycle, writing through freshly-opened handles (taking ownership does NOT grant
+WRITE_DAC). It hands ownership back to SYSTEM afterwards.
+
+Self-limiting by design: once TP is ON, Defender re-protects the key itself and
+later writes are blocked by the `WdFilter` minifilter (Event 5013).
+
+Three outcomes, all logged:
+- state flips → `[SUCCESS]`
+- value written, state unchanged → pending a Defender platform refresh or reboot
+- write rejected → centrally managed (Intune/MDM/GPO); falls back to the GUI/Intune/GPO instructions printed by `tamper-protection-policy.xml`
 
 ---
 
@@ -84,6 +101,7 @@ The Wazuh manager AR is reactive (alert → manager → agent). Layer 1 + 2 reac
 |------|-------------|
 | `reenable-defender.cmd` | `C:\Program Files (x86)\ossec-agent\active-response\bin\` |
 | `reenable-defender.ps1` | `C:\Program Files\Sysinternals\` |
+| `enable-tamper-protection.ps1` | `C:\Program Files\Sysinternals\` |
 | `watchdog-service.ps1` | `C:\Program Files\Sysinternals\` |
 | `enforce-tamper-protection.ps1` | `C:\Program Files\Sysinternals\` |
 | `tamper-protection-policy.xml` | `C:\Program Files\Sysinternals\` |
@@ -127,10 +145,11 @@ After it finishes, do the **manager-side** config above, then restart the agent 
 |------|------|
 | `reenable-defender.cmd` | Wrapper Wazuh calls. Prefers PowerShell 7, falls back to Windows PowerShell 5.1. |
 | `reenable-defender.ps1` | Does the actual work. AR mode (reads JSON from stdin via `ReadLine()`) or standalone (no stdin). |
+| `enable-tamper-protection.ps1` | Layer-0 helper: turns Tamper Protection ON locally (registry ownership + ACL cycle). Dot-sourced by the AR, the install, and the audit script. |
 | `watchdog-service.ps1` | 1 s poll: keeps `WinDefend` alive + re-issues `Set-MpPreference -DisableRealtimeMonitoring $false`. |
-| `enforce-tamper-protection.ps1` | Audit + re-enforce; surfaces Tamper OFF status with GUI/Intune/GPO enable path. |
+| `enforce-tamper-protection.ps1` | Audit + re-enforce; attempts the enable via the shared helper, then surfaces GUI/Intune/GPO enable path if it did not stick. |
 | `tamper-protection-policy.xml` | Ready-to-paste Intune OMA-URI + GPO ADMX policy for Tamper Protection. |
-| `install.ps1` | One-shot installer. Downloads, places, registers both Scheduled Tasks, imports publisher cert. |
+| `install.ps1` | One-shot installer. Downloads, places, registers both Scheduled Tasks, imports publisher cert, attempts Tamper enable. |
 | `sign-once.ps1` | Run once on a Windows dev box. Creates cert, signs every script, exports `.cer`. |
 | `defender-guard.cer` | Public cert produced by `sign-once.ps1`; trusted by `install.ps1` on the agent. (Only present after you run `sign-once.ps1`.) |
 | `ossec.conf` | Manager-side `<command>` + `<active-response>` blocks. |
@@ -286,6 +305,7 @@ sudo systemctl restart wazuh-manager
 Unregister-ScheduledTask 'Defender-Guard-Event-Watch','Defender-Guard-Service-Watch' -Confirm:$false
 Remove-Item "C:\Program Files (x86)\ossec-agent\active-response\bin\reenable-defender.cmd"
 Remove-Item "C:\Program Files\Sysinternals\reenable-defender.ps1"
+Remove-Item "C:\Program Files\Sysinternals\enable-tamper-protection.ps1"
 Remove-Item "C:\Program Files\Sysinternals\watchdog-service.ps1"
 Remove-Item "C:\Program Files\Sysinternals\enforce-tamper-protection.ps1"
 Remove-Item "C:\Program Files\Sysinternals\tamper-protection-policy.xml"
