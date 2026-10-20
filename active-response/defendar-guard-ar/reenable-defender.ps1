@@ -1,119 +1,191 @@
 # reenable-defender.ps1
 # Wazuh custom Active Response + standalone launcher.
-# Re-enable Windows Defender real-time protection.
+# Restore supported Microsoft Defender Antivirus protections on Windows 11
+# 22H2/23H2/24H2/25H2, using only parameters available on the local OS.
 #
-# Triggered by:
-#  - Wazuh rule 100010 / 100011 (Defender RTP disabled) -- via `reenable-defender.cmd`
-#  - Scheduled Task Defender-Guard-Event-Watch / Defender-Guard-Service-Watch -- directly
+# Restores where supported:
+#   - Real-time protection
+#   - Behavior monitoring, IOAV and script scanning
+#   - Cloud-delivered protection (MAPS) and Block at First Sight
+#   - Automatic safe-sample submission
+#   - Dev Drive protection/performance mode, where exposed by the OS
 #
-# Strategy for first-action aggression:
-#   - Issue ALL preference re-enables in parallel (no sleeps before).
-#   - Verify RTP status with Get-MpComputerStatus; if it flipped, return fast.
-#   - Only restart the service if the preference write did NOT take effect.
-#   - Bounded retry (max 5 s total) so we never block the AR / watcher past a window.
+# Tamper Protection is deliberately NOT bypassed. Windows may reject local
+# changes while Tamper Protection is enabled; manage its state through
+# Windows Security, Intune, or the Microsoft Defender portal. This script
+# reports its status only.
 #
-# NOTE: Wazuh execd keeps stdin OPEN -> must ReadLine(), never ReadToEnd().
-# NOTE: custom AR is NOT auto-logged -> we Add-Content our own log lines.
+# NOTE: Wazuh execd keeps stdin OPEN -> ReadLine(), never ReadToEnd().
+# NOTE: custom AR is not auto-logged -> append our own log lines.
 
-$ErrorActionPreference = "SilentlyContinue"
-$log = "C:\Program Files (x86)\ossec-agent\active-response\active-responses.log"
+$ErrorActionPreference = 'SilentlyContinue'
+$log = 'C:\Program Files (x86)\ossec-agent\active-response\active-responses.log'
 $deadline = (Get-Date).AddSeconds(5)
 
-function Write-Log($msg) {
-    $line = "{0} reenable-defender: {1}" -f (Get-Date -Format "yyyy/MM/dd HH:mm:ss"), $msg
+function Write-Log {
+    param([string]$Message)
+    $line = '{0} reenable-defender: {1}' -f (Get-Date -Format 'yyyy/MM/dd HH:mm:ss'), $Message
     try {
         $fs = [System.IO.FileStream]::new($log, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)
         $sw = [System.IO.StreamWriter]::new($fs)
-        $sw.WriteLine($line); $sw.Flush(); $sw.Close(); $fs.Close()
+        $sw.WriteLine($line)
+        $sw.Flush()
+        $sw.Close()
+        $fs.Close()
     } catch { }
 }
 
-# Detect mode: Wazuh AR (stdin JSON) vs standalone (Scheduled Task / manual call).
+function Set-DefenderPreference {
+    param(
+        [string]$Name,
+        [object]$Value,
+        [hashtable]$SupportedParameters
+    )
+    if (-not $SupportedParameters.ContainsKey($Name)) {
+        Write-Log "SKIP: Set-MpPreference parameter '$Name' is not available on this Windows/Defender version."
+        return
+    }
+    try {
+        $arg = @{}
+        $arg[$Name] = $Value
+        $arg['ErrorAction'] = 'Stop'
+        Set-MpPreference @arg
+        Write-Log "Requested $Name=$Value."
+    } catch {
+        Write-Log "FAILED $Name=$Value : $($_.Exception.Message)"
+    }
+}
+
+function Get-DefenderStatus {
+    try { return Get-MpComputerStatus -ErrorAction Stop } catch { return $null }
+}
+
+# Detect Wazuh AR (stdin JSON) vs standalone Scheduled Task/manual invocation.
 $isAR = $false
-$stdin = $null
+$stdinLine = $null
 try {
     if ([Console]::In -ne $null -and [Console]::In.Peek() -ge 0) {
-        $isAR  = $true
-        $stdin = [Console]::In.ReadLine()
-    }
-} catch {}
-
-$action = "add"
-if ($isAR) {
-    Write-Log "Starting (AR). stdin=$stdin"
-    try { $action = ($stdin | ConvertFrom-Json).command } catch {}
-} else {
-    Write-Log "Starting (standalone)."
-}
-
-if ($action -ne "add") {
-    Write-Log "Timeout/delete action received, no-op."
-    Write-Log "Ended."
-    return
-}
-
-# ----------------------------------------------------------------------
-# 1. SERVICE LIVENESS -- do this first so a stopped WinDefend does not
-#    block the preference API.
-# ----------------------------------------------------------------------
-try {
-    $svc = Get-Service -Name WinDefend -ErrorAction Stop
-    if ($svc.Status -ne 'Running') {
-        Write-Log "WinDefend not Running ($($svc.Status)), starting."
-        try { Set-Service -Name WinDefend -StartupType Automatic } catch {}
-        Start-Service -Name WinDefend -ErrorAction SilentlyContinue
+        $isAR = $true
+        $stdinLine = [Console]::In.ReadLine()
     }
 } catch { }
 
-# ----------------------------------------------------------------------
-# 2. PREFERENCE RE-ENABLE -- all four preference flags at once, no
-#    intermediate sleeps. Allow the service a brief moment to register
-#    the writes (preference API is sync but WinDefend may need ~200 ms
-#    to flip IsTamperProtected-gated writes).
-# ----------------------------------------------------------------------
-Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
-Set-MpPreference -DisableBehaviorMonitoring  $false -ErrorAction SilentlyContinue
-Set-MpPreference -DisableIOAVProtection     $false -ErrorAction SilentlyContinue
-Set-MpPreference -DisableScriptScanning     $false -ErrorAction SilentlyContinue
-
-# ----------------------------------------------------------------------
-# 3. VERIFY FAST -- poll once now; if RTP is back, we're done. If not,
-#    poll a few more times within the 5s budget, restarting the service
-#    only when needed.
-# ----------------------------------------------------------------------
-function Test-Rtp {
+$action = 'add'
+if ($isAR) {
+    Write-Log "Starting (AR). stdin=$stdinLine"
     try {
-        $s = Get-MpComputerStatus -ErrorAction Stop
-        return [bool]$s.RealTimeProtectionEnabled
-    } catch { return $false }
+        $parsed = $stdinLine | ConvertFrom-Json -ErrorAction Stop
+        if ($parsed.command) { $action = [string]$parsed.command }
+    } catch { Write-Log 'Could not parse AR stdin as JSON; defaulting to add.' }
+} else {
+    Write-Log 'Starting (standalone).'
 }
 
-if (Test-Rtp) {
-    Write-Log "Verification Ended. RealTimeProtectionEnabled=True (first check)"
-    Write-Log "Ended."
+if ($action -ne 'add') {
+    Write-Log "Action '$action' received; no-op."
+    Write-Log 'Ended.'
     return
 }
 
-# Not yet on. Bounded retry loop until we hit the 5s deadline.
+try {
+    $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+    Write-Log "OS: $($os.Caption); version=$($os.Version); build=$($os.BuildNumber)."
+} catch { Write-Log 'Could not determine Windows version.' }
+
+# Get supported Set-MpPreference parameters once; avoid binding errors across
+# Defender platform/Windows builds.
+$setMpCommand = Get-Command Set-MpPreference -ErrorAction SilentlyContinue
+$supported = @{}
+if ($setMpCommand) {
+    foreach ($key in $setMpCommand.Parameters.Keys) { $supported[$key] = $true }
+} else {
+    Write-Log 'ERROR: Set-MpPreference cmdlet is unavailable.'
+}
+
+# Ensure the service is available. Service start may be blocked by policy or
+# Tamper Protection; failures are logged and the script continues.
+try {
+    $svc = Get-Service -Name WinDefend -ErrorAction Stop
+    if ($svc.Status -ne 'Running') {
+        Write-Log "WinDefend status is $($svc.Status); attempting start."
+        try { Set-Service -Name WinDefend -StartupType Automatic -ErrorAction Stop } catch {
+            Write-Log "Could not set WinDefend startup type: $($_.Exception.Message)"
+        }
+        try { Start-Service -Name WinDefend -ErrorAction Stop } catch {
+            Write-Log "Could not start WinDefend: $($_.Exception.Message)"
+        }
+    }
+} catch { Write-Log "WinDefend service query failed: $($_.Exception.Message)" }
+
+# Restore independent settings so one unsupported/blocked setting does not
+# prevent attempts to restore the others.
+Set-DefenderPreference -Name 'DisableRealtimeMonitoring' -Value $false -SupportedParameters $supported
+Set-DefenderPreference -Name 'DisableBehaviorMonitoring' -Value $false -SupportedParameters $supported
+Set-DefenderPreference -Name 'DisableIOAVProtection' -Value $false -SupportedParameters $supported
+Set-DefenderPreference -Name 'DisableScriptScanning' -Value $false -SupportedParameters $supported
+
+# Cloud-delivered protection: MAPS Advanced + Block at First Sight enabled.
+# Values follow the Defender Set-MpPreference enum: Advanced=2.
+Set-DefenderPreference -Name 'MAPSReporting' -Value 2 -SupportedParameters $supported
+Set-DefenderPreference -Name 'DisableBlockAtFirstSeen' -Value $false -SupportedParameters $supported
+
+# Submit safe samples automatically. Consent enum: SendSafeSamples=3.
+Set-DefenderPreference -Name 'SubmitSamplesConsent' -Value 3 -SupportedParameters $supported
+
+# Dev Drive protection is exposed as PerformanceModeStatus only on supported
+# Defender/Windows builds. Do not assume the parameter exists on older builds.
+Set-DefenderPreference -Name 'PerformanceModeStatus' -Value 'Enabled' -SupportedParameters $supported
+
+# Bounded verification/retry. Do not return early merely because RTP is on:
+# cloud/sample/Dev Drive settings and Tamper Protection status must be reported.
 $attempt = 0
-while ((Get-Date) -lt $deadline) {
+$status = Get-DefenderStatus
+while ((-not $status -or -not $status.RealTimeProtectionEnabled) -and (Get-Date) -lt $deadline) {
     $attempt++
-    Start-Sleep -Milliseconds 500
-    if (Test-Rtp) { break }
-    # On the second or later failure, restart the service once -- that's
-    # the last lever that re-applies preferences on a stuck state.
-    if ($attempt -eq 2) {
-        Write-Log "Attempt ${attempt}: still off, restarting WinDefend."
-        try { Restart-Service -Name WinDefend -Force -ErrorAction Stop } catch { }
-        Start-Sleep -Milliseconds 500
-        # Re-issue preferences (the restart clears state).
-        Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
-        Set-MpPreference -DisableBehaviorMonitoring  $false -ErrorAction SilentlyContinue
-        Set-MpPreference -DisableIOAVProtection     $false -ErrorAction SilentlyContinue
-        Set-MpPreference -DisableScriptScanning     $false -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 400
+    $status = Get-DefenderStatus
+    if ($attempt -eq 2 -and (-not $status -or -not $status.RealTimeProtectionEnabled)) {
+        Write-Log 'RTP still disabled after retries; attempting one WinDefend restart.'
+        try { Restart-Service -Name WinDefend -Force -ErrorAction Stop } catch {
+            Write-Log "WinDefend restart failed (policy/Tamper Protection may block it): $($_.Exception.Message)"
+        }
+        # Re-issue only core protection preferences after the restart.
+        Set-DefenderPreference -Name 'DisableRealtimeMonitoring' -Value $false -SupportedParameters $supported
+        Set-DefenderPreference -Name 'DisableBehaviorMonitoring' -Value $false -SupportedParameters $supported
+        Set-DefenderPreference -Name 'DisableIOAVProtection' -Value $false -SupportedParameters $supported
+        Set-DefenderPreference -Name 'DisableScriptScanning' -Value $false -SupportedParameters $supported
     }
 }
 
-$rtp = Test-Rtp
-Write-Log "Verification Ended. RealTimeProtectionEnabled=$rtp (attempts=${attempt})"
-Write-Log "Ended."
+$status = Get-DefenderStatus
+if ($status) {
+    Write-Log "VERIFY: RealTimeProtectionEnabled=$($status.RealTimeProtectionEnabled); BehaviorMonitorEnabled=$($status.BehaviorMonitorEnabled); IoavProtectionEnabled=$($status.IoavProtectionEnabled); AntivirusEnabled=$($status.AntivirusEnabled)."
+    if ($status.PSObject.Properties.Name -contains 'IsTamperProtected') {
+        Write-Log "STATUS: IsTamperProtected=$($status.IsTamperProtected). Tamper Protection is status-only; use supported central/local Windows Security management to change it."
+    } else {
+        Write-Log 'STATUS: IsTamperProtected property is unavailable in this Defender platform version.'
+    }
+} else {
+    Write-Log 'VERIFY: Get-MpComputerStatus unavailable or failed.'
+}
+
+try {
+    $pref = Get-MpPreference -ErrorAction Stop
+    if ($pref.PSObject.Properties.Name -contains 'MAPSReporting') {
+        Write-Log "VERIFY: MAPSReporting=$($pref.MAPSReporting) (2=Advanced/cloud-delivered protection)."
+    }
+    if ($pref.PSObject.Properties.Name -contains 'SubmitSamplesConsent') {
+        Write-Log "VERIFY: SubmitSamplesConsent=$($pref.SubmitSamplesConsent) (3=SendSafeSamples)."
+    }
+    if ($pref.PSObject.Properties.Name -contains 'DisableBlockAtFirstSeen') {
+        Write-Log "VERIFY: DisableBlockAtFirstSeen=$($pref.DisableBlockAtFirstSeen) (False=enabled)."
+    }
+    if ($pref.PSObject.Properties.Name -contains 'PerformanceModeStatus') {
+        Write-Log "VERIFY: PerformanceModeStatus=$($pref.PerformanceModeStatus)."
+    } else {
+        Write-Log 'VERIFY: PerformanceModeStatus is not exposed by Get-MpPreference on this platform; Dev Drive protection cannot be verified by this property.'
+    }
+} catch { Write-Log "Get-MpPreference verification failed: $($_.Exception.Message)" }
+
+Write-Log 'Completed. Settings blocked by Tamper Protection or organizational policy require remediation through the supported management channel.'
+Write-Log 'Ended.'
