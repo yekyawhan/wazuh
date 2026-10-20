@@ -3,7 +3,7 @@
 # Re-enable Windows Defender real-time protection.
 #
 # Triggered by:
-#  - Wazuh rule 100620 / 100630 (Defender RTP disabled) -- via `reenable-defender.cmd`
+#  - Wazuh rule 100010 / 100011 (Defender RTP disabled) -- via `reenable-defender.cmd`
 #  - Scheduled Task Defender-Guard-Event-Watch / Defender-Guard-Service-Watch -- directly
 #
 # Strategy for first-action aggression:
