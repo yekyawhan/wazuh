@@ -41,7 +41,7 @@ Unblock-File "$destDir\install.ps1"
 <active-response>
   <command>reenable-defender</command>
   <location>local</location>
-  <rules_id>100620</rules_id>
+  <rules_id>100010</rules_id>
 </active-response>
 ```
 
@@ -196,7 +196,7 @@ Edit `/var/ossec/etc/ossec.conf` and add inside `<ossec_config>`:
 <active-response>
   <command>reenable-defender</command>
   <location>local</location>
-  <rules_id>100620</rules_id>
+  <rules_id>100010</rules_id>
 </active-response>
 ```
 
