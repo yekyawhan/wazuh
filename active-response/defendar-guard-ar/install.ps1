@@ -129,7 +129,17 @@ function Register-GuardTask {
         '  </Actions>'
         '</Task>'
     ))
-    Register-ScheduledTask -TaskName $Name -Xml $xml -Force | Out-Null
+    # Registration must not abort the installer: a rejected trigger (policy
+    # locked schema, missing channel) must degrade to "not registered" and
+    # let the remaining layers continue. HRESULT 0x80073a98 = invalid channel path.
+    try {
+        Register-ScheduledTask -TaskName $Name -Xml $xml -Force -ErrorAction Stop | Out-Null
+    } catch {
+        Write-Host "  [!!] Register-ScheduledTask '$Name' failed: $($_.Exception.Message)" -ForegroundColor Red
+        Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue |
+            Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+        return
+    }
     Write-Host "  [OK] Scheduled Task '$Name' registered." -ForegroundColor Green
     return $Name
 }
@@ -217,14 +227,15 @@ $r1 = Register-GuardTask -Name "Defender-Guard-Service-Watch" -Script $psSvc -Tr
 if ($r1) { $registered += $r1 }
 
 # 2) Event-watcher: fires on Defender state-change events (5001/5010/5012).
-#    Uses xpath-style Subscription so the task schema accepts it on
-#    modern Win10/11. Best-effort -- if it fails, service watchdog is
-#    still the failsafe.
+#    MUST use the QueryList form with an explicit channel Path. A bare
+#    <Subscription> with only an xpath predicate fails with
+#    "The specified channel path is invalid." (HRESULT 0x80073a98) because
+#    the task schema cannot infer the channel. The inner XML must be
+#    XML-escaped (&lt; &gt;) because it is embedded as element content.
+#    Verified on Windows 11 build 26200.
 $eventTrigger = [string]::Join([Environment]::NewLine, @(
     '<EventTrigger>'
-    '  <Subscription>'
-    '*[System[Provider[@Name=''Microsoft-Windows-Windows Defender''] and (EventID=5001 or EventID=5010 or EventID=5012)]]'
-    '</Subscription>'
+    '  <Subscription>&lt;QueryList&gt;&lt;Query Id="0" Path="Microsoft-Windows-Windows Defender/Operational"&gt;&lt;Select Path="Microsoft-Windows-Windows Defender/Operational"&gt;*[System[(EventID=5001 or EventID=5010 or EventID=5012)]]&lt;/Select&gt;&lt;/Query&gt;&lt;/QueryList&gt;</Subscription>'
     '  <Delay>PT0S</Delay>'
     '  <Enabled>true</Enabled>'
     '  <ExecutionTimeLimit>PT2M</ExecutionTimeLimit>'
@@ -248,20 +259,24 @@ try {
     if ($status.IsTamperProtected) {
         Write-Host "  [OK] Tamper Protection is ON -- disable attempts will be REJECTED." -ForegroundColor Green
     } else {
-        Write-Host "  [!!] Tamper Protection is OFF. Attempting automatic enable (registry + ACL)..." -ForegroundColor Yellow
+        Write-Host "  [!!] Tamper Protection is OFF. Attempting automatic enable (Windows Security UI)..." -ForegroundColor Yellow
         if ($psTp -and (Test-Path $psTp)) {
             . $psTp
-            [void](Enable-TamperProtectionBestEffort)
+            if ((Get-Process -Id $PID).SessionId -eq 0) {
+                [void](Start-DefenderGuardTamperInSession)
+            } else {
+                [void](Enable-TamperProtectionBestEffort)
+            }
             Start-Sleep -Milliseconds 500
             $after = Get-MpComputerStatus -ErrorAction SilentlyContinue
             if ($after -and $after.IsTamperProtected) {
                 Write-Host "  [OK] Tamper Protection is now ON." -ForegroundColor Green
             } else {
-                Write-Host "  [i] Registry write did not flip the state (centrally managed, or pending platform refresh/reboot)." -ForegroundColor DarkYellow
-                Write-Host "       Enable via GUI / Intune / GPO (see tamper-protection-policy.xml)." -ForegroundColor Yellow
+                Write-Host "  [i] The Windows Security toggle did not flip the state (centrally managed, no interactive session, or pending platform refresh/reboot)." -ForegroundColor DarkYellow
+                Write-Host "       Enable via GUI / Intune (see tamper-protection-policy.xml)." -ForegroundColor Yellow
             }
         } else {
-            Write-Host "       Enable via GUI / Intune / GPO (see tamper-protection-policy.xml)." -ForegroundColor Yellow
+            Write-Host "       Enable via GUI / Intune (see tamper-protection-policy.xml)." -ForegroundColor Yellow
         }
     }
 

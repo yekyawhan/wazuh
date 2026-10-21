@@ -150,10 +150,18 @@ if ($tpStatus -and $tpStatus.PSObject.Properties.Name -contains 'IsTamperProtect
 if ($tpAlreadyOn) {
     Write-Log 'TAMPER: IsTamperProtected=True. No action needed.'
 } else {
+    # On 26H1 the only way to flip Tamper Protection is the Windows Security UI,
+    # and that UI only accepts input from a process in the interactive session.
+    # This script runs as SYSTEM in session 0, so it relaunches the helper
+    # inside the signed-in session and waits for the result.
     $tpHelper = Join-Path $PSScriptRoot 'enable-tamper-protection.ps1'
     if (Test-Path $tpHelper) {
         . $tpHelper
-        [void](Enable-TamperProtectionBestEffort)
+        if ((Get-Process -Id $PID).SessionId -eq 0) {
+            [void](Start-DefenderGuardTamperInSession)
+        } else {
+            [void](Enable-TamperProtectionBestEffort)
+        }
     } else {
         Write-Log "TAMPER: helper not found at $tpHelper; cannot enable automatically."
     }

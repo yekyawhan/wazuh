@@ -74,22 +74,60 @@ The Wazuh manager AR is reactive (alert → manager → agent). Layer 1 + 2 reac
 
 ### Layer 0 — Tamper Protection auto-enable
 
-`enable-tamper-protection.ps1` turns Tamper Protection ON without the GUI. Run by
-`install.ps1`, by `enforce-tamper-protection.ps1`, and on every AR/watcher run.
+`enable-tamper-protection.ps1` turns Tamper Protection ON. Run by `install.ps1`,
+by `enforce-tamper-protection.ps1`, and on every AR/watcher run.
 
-State value: `HKLM\SOFTWARE\Microsoft\Windows Defender\Features\TamperProtection`
-(DWORD `5` = ON, `4`/`0` = OFF). While TP is OFF that key is owned by SYSTEM with
-an ACL that denies even elevated admins, so the helper walks an ownership + ACL
-cycle, writing through freshly-opened handles (taking ownership does NOT grant
-WRITE_DAC). It hands ownership back to SYSTEM afterwards.
+**It drives the Windows Security UI (UIAutomation), not the registry.** On
+Windows 11 26H1 (build 26200) Tamper Protection is a `WdFilter.sys` minifilter
+that gates on the *caller token*, not on the value written. Measured on a real
+host, as elevated admin **and** as SYSTEM:
 
-Self-limiting by design: once TP is ON, Defender re-protects the key itself and
-later writes are blocked by the `WdFilter` minifilter (Event 5013).
+| Attempt | Result |
+|---|---|
+| `Features\TamperProtection = 5` (registry) | `Requested registry access is not allowed` |
+| take ownership of the Features key | `Attempted to perform an unauthorized operation` (`NtSetSecurityObject` is vetoed) |
+| `reg.exe add ... /f` | `ERROR: Access is denied.` |
+| `Set-MpPreference -DisableTamperProtection $false` | `0x80004001` (E_NOTIMPL — the parameter is reserved by design) |
+| `Invoke-CimMethod` on `MSFT_MpPreference` | same `0x80004001` |
+| `Policies\...\Windows Defender\TamperProtection` | write succeeds, Defender **ignores** it (also after `gpupdate /force`) |
+| `Invoke-CommandInDesktopPackage` in SecHealthUI | child token carries **no** package SID → still rejected |
 
-Three outcomes, all logged:
-- state flips → `[SUCCESS]`
-- value written, state unchanged → pending a Defender platform refresh or reboot
-- write rejected → centrally managed (Intune/MDM/GPO); falls back to the GUI/Intune/GPO instructions printed by `tamper-protection-policy.xml`
+The only caller Defender whitelists for Defender-control RPC is the Windows
+Security app package itself:
+
+```
+Microsoft.SecHealthUI_8wekyb3d8bbwe
+S-1-15-3-1024-3153509613-960666767-3724611135-2725662640-12138253-543910227-1950414635-4190290187
+```
+
+So the helper opens `windowsdefender://threatsettings`, finds the
+`Tamper Protection` `ToggleSwitch` in the XAML tree, and flips it. The click is
+executed *by* SecHealthUI, whose token is on the allow-list.
+
+Verified end-to-end on the test host:
+
+```
+toggle state Off -> On, IsTamperProtected False -> True,
+Features\TamperProtection 4 -> 5, TamperProtectionSource=UI,
+Set-MpPreference -DisableRealtimeMonitoring $true is then overridden
+(RTP stays True) == tamper is genuinely enforcing.
+```
+
+**Session requirement.** The UI only accepts input from a process in the
+interactive user session. A process in session 0 (Wazuh AR, SYSTEM) cannot see
+the window at all, so the AR path calls `Start-DefenderGuardTamperInSession`,
+which relaunches the helper inside the signed-in session via a Scheduled Task
+with `LogonType=Interactive` and waits for the result.
+
+Outcomes, all logged:
+- toggle flipped and `IsTamperProtected=True` → success
+- toggle flipped but runtime still False → pending Defender refresh/reboot
+- toggle not reachable (no interactive session, or UI layout changed) → falls
+  back to the GUI/Intune instructions in `tamper-protection-policy.xml`
+
+> On Windows 11 **Pro** the Tamper Protection GPO does not exist
+> (`WindowsDefender.admx` is absent on that SKU). For domain-joined Pro fleets
+> use Intune; the local GPO path only exists on Enterprise/Education.
 
 ---
 
@@ -145,7 +183,7 @@ After it finishes, do the **manager-side** config above, then restart the agent 
 |------|------|
 | `reenable-defender.cmd` | Wrapper Wazuh calls. Prefers PowerShell 7, falls back to Windows PowerShell 5.1. |
 | `reenable-defender.ps1` | Does the actual work. AR mode (reads JSON from stdin via `ReadLine()`) or standalone (no stdin). |
-| `enable-tamper-protection.ps1` | Layer-0 helper: turns Tamper Protection ON locally (registry ownership + ACL cycle). Dot-sourced by the AR, the install, and the audit script. |
+| `enable-tamper-protection.ps1` | Layer-0 helper: turns Tamper Protection ON by driving the Windows Security UI (`Enable-TamperProtectionBestEffort`), plus `Start-DefenderGuardTamperInSession` for the session-0 AR path. Dot-sourced by the AR, the install, and the audit script. |
 | `watchdog-service.ps1` | 1 s poll: keeps `WinDefend` alive + re-issues `Set-MpPreference -DisableRealtimeMonitoring $false`. |
 | `enforce-tamper-protection.ps1` | Audit + re-enforce; attempts the enable via the shared helper, then surfaces GUI/Intune/GPO enable path if it did not stick. |
 | `tamper-protection-policy.xml` | Ready-to-paste Intune OMA-URI + GPO ADMX policy for Tamper Protection. |

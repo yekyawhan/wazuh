@@ -69,14 +69,19 @@ if ($status.IsTamperProtected) {
     Write-Host "[OK] Tamper Protection is ON. Disable attempts will be REJECTED." -ForegroundColor Green
     Write-Log "Tamper Protection ON, RTP=True."
 } else {
-    Write-Host "[WARN] Tamper Protection is OFF. Attempting automatic registry enable (Layer-0)..." -ForegroundColor Yellow
-    Write-Log "Tamper Protection OFF. Attempting registry enable."
+    Write-Host "[WARN] Tamper Protection is OFF. Attempting automatic enable via Windows Security UI (Layer-0)..." -ForegroundColor Yellow
+    Write-Log "Tamper Protection OFF. Attempting UI-driven enable."
 
-    # Same implementation the AR/watcher path uses.
+    # Same implementation the AR/watcher path uses. On 26H1 this drives the
+    # Windows Security toggle, which is the only channel Defender accepts.
     $tpHelper = Join-Path $PSScriptRoot 'enable-tamper-protection.ps1'
     if (Test-Path $tpHelper) {
         . $tpHelper
-        $wrote = Enable-TamperProtectionBestEffort
+        if ((Get-Process -Id $PID).SessionId -eq 0) {
+            $wrote = Start-DefenderGuardTamperInSession
+        } else {
+            $wrote = Enable-TamperProtectionBestEffort
+        }
     } else {
         Write-Host "  [i] helper not found: $tpHelper" -ForegroundColor DarkYellow
     }
@@ -87,7 +92,7 @@ if ($status.IsTamperProtected) {
         Write-Host "[SUCCESS] Tamper Protection is now ON." -ForegroundColor Green
         Write-Log "Tamper Protection confirmed ON."
     } else {
-        Write-Host "[INFO] Registry write did not flip the state. It may be centrally managed, or pending a Defender platform refresh / reboot." -ForegroundColor Cyan
+        Write-Host "[INFO] The Windows Security toggle did not flip the state. It may be centrally managed, or pending a Defender platform refresh / reboot." -ForegroundColor Cyan
         Write-Host ""
         Write-Host "Supported paths to enable it:" -ForegroundColor Magenta
         Write-Host ""
@@ -100,10 +105,8 @@ if ($status.IsTamperProtected) {
         Write-Host "    See tamper-protection-policy.xml (OMA-URI snippets)."
         Write-Host ""
         Write-Host "  GPO (domain-joined fleet):" -ForegroundColor Yellow
-        Write-Host "    Computer\Administrative Templates\Windows Components\"
-        Write-Host "    Microsoft Defender Antivirus\Real-time Protection"
-        Write-Host "      Tamper Protection = Enabled"
-        Write-Host "      Configure real-time protection = Enabled"
+        Write-Host "    NOTE: the Tamper Protection GPO is not available on Windows 11 Pro"
+        Write-Host "    (WindowsDefender.admx is absent on this SKU). Use Intune or the GUI."
     }
 }
 
