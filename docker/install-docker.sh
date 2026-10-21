@@ -85,6 +85,15 @@ echo "[INFO] Docker repository codename: $DOCKER_CODENAME"
 echo ""
 
 # -----------------------------------
+# Remove stale Docker APT repository files
+# -----------------------------------
+# An old docker.list/docker.sources may point to the wrong distribution
+# (for example, Ubuntu's repository on Debian) and break the first apt-get update.
+echo "[+] Removing stale Docker repository configuration..."
+rm -f /etc/apt/sources.list.d/docker.list
+rm -f /etc/apt/sources.list.d/docker.sources
+
+# -----------------------------------
 # Remove old Docker packages
 # -----------------------------------
 echo "[+] Removing old Docker packages..."
