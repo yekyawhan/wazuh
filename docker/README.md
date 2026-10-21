@@ -59,12 +59,12 @@ Unsupported distributions are rejected automatically.
 ### Option 1 — One-Line Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yekyawhan/wazuh/7ec439638595a7d4f26ce232dd142c36c7239348/docker/install-docker.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/docker/install-docker.sh | sudo bash
 ```
 ### Option 2 — Download and Run
 
 ```bash
-wget https://raw.githubusercontent.com/yekyawhan/wazuh/7ec439638595a7d4f26ce232dd142c36c7239348/docker/install-docker.sh && chmod +x install-docker.sh && sudo ./install-docker.sh
+wget https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/docker/install-docker.sh && chmod +x install-docker.sh && sudo ./install-docker.sh
 ```
 ---
 ## 🔍 OS Detection
