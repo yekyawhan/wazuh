@@ -205,31 +205,65 @@ function Start-DefenderGuardTamperInSession {
     }
 
     # who is signed in interactively?
+    #
+    # qwinsta column layout changes with session state:
+    #   Active: " rdp-tcp#0   AGB   2  Active"   (session name present)
+    #   Disc:   "             AGB   2  Disc"     (session name EMPTY -> columns shift!)
+    # A single regex anchored on the session name misses disconnected sessions,
+    # which is exactly when the watcher needs to fire (RDP dropped -> TP off).
+    # So: match on STATE + a numeric session id that is NOT 0, and take the
+    # token before the id as the username. Prefer Active, fall back to Disc/Conn.
     $user = $null
-    $sid  = $null
     try {
-        $sessions = (& qwinsta) 2>&1
-        foreach ($line in $sessions) {
-            if ($line -match '^\s*(rdp-tcp#\d+|console)\s+(\S+)\s+(\d+)\s+Active') {
-                $user = $Matches[2]
-                break
+        $best = $null
+        foreach ($line in (& qwinsta) 2>&1) {
+            if ($line -match '^\s*(?:\S+\s+)?(\S+)\s+(\d{1,5})\s+(Active|Disc|Conn)\b') {
+                $u = $Matches[1]; $id = [int]$Matches[2]; $st = $Matches[3]
+                if ($id -eq 0) { continue }                       # services/session-0
+                if ($u -match '^\d+$' -or $u -match '^(SESSIONNAME|Listen)$') { continue }
+                $cand = @{ User = $u; Id = $id; State = $st }
+                if ($st -eq 'Active') { $best = $cand; break }     # best case, stop now
+                if (-not $best) { $best = $cand }                  # remember fallback
             }
         }
+        if ($best) { $user = $best.User; $sid = $best.Id }
     } catch { }
     if (-not $user) {
-        Write-Log 'TAMPER: no active interactive session; cannot reach the Windows Security UI.'
+        Write-Log 'TAMPER: no interactive user session found; cannot reach the Windows Security UI.'
         return $false
     }
 
-    $logPath  = Join-Path $env:ProgramData 'Defender-Guard\tamper-session.log'
+    # A Disconnected session has no desktop for UIAutomation to talk to.
+    # Reattach it to the physical console so the window can be driven.
+    # tscon from SYSTEM works against the user's own disconnected session.
+    if ($sid -and $user) {
+        try {
+            $q = (& qwinsta) 2>&1 | Where-Object { $_ -match "\s$sid\s+Disc" }
+            if ($q) {
+                & tscon.exe $sid '/dest:console' 2>&1 | Out-Null
+                Start-Sleep -Seconds 4
+                Write-Log "TAMPER: reattached disconnected session $sid ('$user') to console."
+            }
+        } catch { Write-Log "TAMPER: could not reattach session $sid : $($_.Exception.Message)" }
+    }
+
+    $logDir   = Join-Path $env:ProgramData 'Defender-Guard'
+    $logPath  = Join-Path $logDir 'tamper-session.log'
     $taskName = 'Defender-Guard-Tamper-Enable'
     $nl       = [Environment]::NewLine
+
+    # The in-session child writes its result here. The directory must exist
+    # BEFORE the child runs, otherwise the child's Add-Content fails and the
+    # result is lost.
+    try {
+        if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+    } catch { Write-Log "TAMPER: could not create $logDir : $($_.Exception.Message)" }
 
     # The child writes its own log line so we can read the result back.
     $xmlArgs = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "' +
                ". '$helperPath'; " +
                "`$r = Enable-TamperProtectionBestEffort; " +
-               "Add-Content -Path '$logPath' -Value ('RESULT=' + `$r)" +
+               "try { Add-Content -Path '$logPath' -Value ('RESULT=' + `$r) } catch { }; " +
                '"'
 
     $xml = [string]::Join($nl, @(
