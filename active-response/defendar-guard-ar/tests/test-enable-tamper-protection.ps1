@@ -153,5 +153,55 @@ $r = Enable-TamperProtectionBestEffort -TimeoutSeconds 3
 Check 'no-verify: returns $false'   ( $r -eq $false )
 Check 'no-verify: did click'        ( $script:clickCount -eq 1 )
 
+# ---------------------------------------------------------------------------
+# 8. Select-InteractiveSession -- the qwinsta column-shift bug.
+#    A Disconnected session has an EMPTY session-name column, so the columns
+#    shift left and a session-name-anchored regex silently finds nobody.
+#    That is why the AR path reported "no active interactive session" while a
+#    manual run (same helper, interactive session) worked fine.
+# ---------------------------------------------------------------------------
+
+# Active session: session name present
+$active = @(
+    ' SESSIONNAME               USERNAME                 ID  STATE   TYPE        DEVICE ',
+    '>services                                            0  Disc                        ',
+    ' console                                             1  Conn                        ',
+    ' rdp-tcp#0                 AGB                       2  Active                      ',
+    ' 31c5ce94259d4006a9e4                            65536  Listen                      '
+)
+$p = Select-InteractiveSession -Lines $active
+Check 'qwinsta active: found user'    ( $p -and $p.User -eq 'AGB' )
+Check 'qwinsta active: right id'      ( $p -and $p.Id -eq 2 )
+Check 'qwinsta active: state'         ( $p -and $p.State -eq 'Active' )
+
+# Disconnected session: session name column EMPTY -> columns shift
+$disc = @(
+    ' SESSIONNAME               USERNAME                 ID  STATE   TYPE        DEVICE ',
+    '>services                                            0  Disc                        ',
+    '                             AGB                       2  Disc                        ',
+    ' console                                             3  Conn                        ',
+    ' 31c5ce94259d4006a9e4                            65536  Listen                      '
+)
+$p = Select-InteractiveSession -Lines $disc
+Check 'qwinsta disc: found user'      ( $p -and $p.User -eq 'AGB' )
+Check 'qwinsta disc: right id'        ( $p -and $p.Id -eq 2 )
+Check 'qwinsta disc: state'           ( $p -and $p.State -eq 'Disc' )
+
+# Active wins over Disc when both are present
+$both = $disc + ' rdp-tcp#1                 OTHER                      4  Active                      '
+$p = Select-InteractiveSession -Lines $both
+Check 'qwinsta both: prefers Active'  ( $p -and $p.User -eq 'OTHER' )
+Check 'qwinsta both: right id'         ( $p -and $p.Id -eq 4 )
+
+# Only services / listeners -> nothing usable
+$none = @(
+    ' SESSIONNAME               USERNAME                 ID  STATE   TYPE        DEVICE ',
+    '>services                                            0  Disc                        ',
+    ' 31c5ce94259d4006a9e4                            65536  Listen                      ',
+    ' rdp-tcp                                         65537  Listen                      '
+)
+$p = Select-InteractiveSession -Lines $none
+Check 'qwinsta none: returns null'    ( $null -eq $p )
+
 if ($failures.Count) { "FAILED: $($failures.Count) checks"; exit 1 }
 'ALL_PASS'

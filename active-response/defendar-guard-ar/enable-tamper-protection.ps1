@@ -184,6 +184,36 @@ function Enable-TamperProtectionBestEffort {
 }
 
 # ---------------------------------------------------------------------------
+# Select-InteractiveSession
+#
+# Pick the interactive user session from `qwinsta` output. Pure function: takes
+# the lines, returns @{ User; Id; State } or $null. Unit-testable on Linux.
+#
+# qwinsta column layout changes with session state:
+#   Active: " rdp-tcp#0   AGB   2  Active"   (session name present)
+#   Disc:   "             AGB   2  Disc"     (session name EMPTY -> columns shift!)
+# A regex anchored on the session name misses disconnected sessions, which is
+# exactly when the watcher needs to fire (RDP dropped -> TP off). So match on
+# STATE + a numeric id that is NOT 0 and take the token before the id as the
+# username. Prefer Active, fall back to Disc/Conn.
+# ---------------------------------------------------------------------------
+function Select-InteractiveSession {
+    param([string[]]$Lines)
+    $best = $null
+    foreach ($line in $Lines) {
+        if ($line -match '^\s*(?:\S+\s+)?(\S+)\s+(\d{1,5})\s+(Active|Disc|Conn)\b') {
+            $u = $Matches[1]; $id = [int]$Matches[2]; $st = $Matches[3]
+            if ($id -eq 0) { continue }                              # services/session-0
+            if ($u -match '^\d+$' -or $u -match '^(SESSIONNAME|Listen)$') { continue }
+            $cand = @{ User = $u; Id = $id; State = $st }
+            if ($st -eq 'Active') { return $cand }                   # best case, stop now
+            if (-not $best) { $best = $cand }                        # remember fallback
+        }
+    }
+    return $best
+}
+
+# ---------------------------------------------------------------------------
 # Start-DefenderGuardTamperInSession
 #
 # The AR script runs as SYSTEM in session 0 and therefore cannot reach the
@@ -205,28 +235,11 @@ function Start-DefenderGuardTamperInSession {
     }
 
     # who is signed in interactively?
-    #
-    # qwinsta column layout changes with session state:
-    #   Active: " rdp-tcp#0   AGB   2  Active"   (session name present)
-    #   Disc:   "             AGB   2  Disc"     (session name EMPTY -> columns shift!)
-    # A single regex anchored on the session name misses disconnected sessions,
-    # which is exactly when the watcher needs to fire (RDP dropped -> TP off).
-    # So: match on STATE + a numeric session id that is NOT 0, and take the
-    # token before the id as the username. Prefer Active, fall back to Disc/Conn.
     $user = $null
+    $sid  = $null
     try {
-        $best = $null
-        foreach ($line in (& qwinsta) 2>&1) {
-            if ($line -match '^\s*(?:\S+\s+)?(\S+)\s+(\d{1,5})\s+(Active|Disc|Conn)\b') {
-                $u = $Matches[1]; $id = [int]$Matches[2]; $st = $Matches[3]
-                if ($id -eq 0) { continue }                       # services/session-0
-                if ($u -match '^\d+$' -or $u -match '^(SESSIONNAME|Listen)$') { continue }
-                $cand = @{ User = $u; Id = $id; State = $st }
-                if ($st -eq 'Active') { $best = $cand; break }     # best case, stop now
-                if (-not $best) { $best = $cand }                  # remember fallback
-            }
-        }
-        if ($best) { $user = $best.User; $sid = $best.Id }
+        $pick = Select-InteractiveSession -Lines (& qwinsta) 2>&1
+        if ($pick) { $user = $pick.User; $sid = $pick.Id; $state = $pick.State }
     } catch { }
     if (-not $user) {
         Write-Log 'TAMPER: no interactive user session found; cannot reach the Windows Security UI.'
