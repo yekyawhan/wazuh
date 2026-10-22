@@ -1,437 +1,95 @@
 # 🐳 Docker Auto Installer
 
-Production-ready Docker installer for **Ubuntu and Debian** systems.
+A Bash installer for Docker Engine on supported Ubuntu and Debian systems. It detects the distribution, configures Docker's official APT repository, installs Docker Engine and the Compose/Buildx plugins, and verifies that the daemon is responding.
 
-The installer automatically detects the Linux distribution and configures the appropriate official Docker repository.
+## What it installs
 
-## 📦 What It Installs
+- Docker Engine (`docker-ce`)
+- Docker CLI (`docker-ce-cli`)
+- Containerd (`containerd.io`)
+- Docker Buildx Plugin
+- Docker Compose Plugin
 
-The script installs:
+The script also refreshes Docker's GPG key, removes stale repository definitions created by earlier versions of this installer, checks that the selected Docker repository release exists, detects whether Docker packages are available for the host, and checks service readiness.
 
-* Docker Engine
-* Docker CLI
-* Docker Compose Plugin
-* Docker Buildx Plugin
-* Containerd
+## Supported operating systems
 
-It also:
+The script recognizes the following distribution IDs:
 
-* Detects Ubuntu or Debian automatically
-* Removes conflicting/old Docker packages
-* Configures the official Docker APT repository
-* Installs and configures the Docker GPG key
-* Enables and starts the Docker service
-* Adds the current user to the `docker` group
-* Verifies the Docker service
-* Verifies Docker and Docker Compose versions
-* Runs a `hello-world` container test
+- Ubuntu
+- Debian
 
----
+A valid codename alone does not guarantee that Docker publishes packages for a release or architecture. The installer checks Docker's repository metadata and the APT package candidate before removing conflicting distribution packages or installing Docker.
 
-## ⚙️ Supported Operating Systems
+Refer to the official documentation for current support and architecture details:
 
-The installer currently supports:
+- [Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/)
+- [Docker Engine on Debian](https://docs.docker.com/engine/install/debian/)
 
-### Ubuntu
+## Installation
 
-* Ubuntu 22.04 LTS
-* Ubuntu 24.04 LTS
-* Other supported Ubuntu releases with a valid Docker repository codename
-
-### Debian
-
-* Debian 12 (Bookworm)
-* Debian 13 (Trixie)
-* Other supported Debian releases with a valid Docker repository codename
-
-The script detects the operating system automatically using:
+### Option 1 — Download, inspect, and run (recommended)
 
 ```bash
-/etc/os-release
+wget -O install-docker.sh https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/docker/install-docker.sh
+less install-docker.sh
+chmod +x install-docker.sh
+sudo ./install-docker.sh
 ```
 
-Unsupported distributions are rejected automatically.
+### Option 2 — Run directly from GitHub
 
----
-
-## 🚀 Installation
-
-### Option 1 — One-Line Install
+Use this only after reviewing the script at the linked repository revision.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/docker/install-docker.sh | sudo bash
 ```
-### Option 2 — Download and Run
 
-```bash
-wget https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/docker/install-docker.sh && chmod +x install-docker.sh && sudo ./install-docker.sh
-```
----
-## 🔍 OS Detection
+## Safety and operational notes
 
-The installer automatically detects the operating system.
+- Run as root or with `sudo`.
+- The script removes stale Docker APT source files at `/etc/apt/sources.list.d/docker.list` and `/etc/apt/sources.list.d/docker.sources`, then writes the correct distribution-specific `docker.sources` file.
+- It checks for Docker repository release metadata and an available `docker-ce` package before removing conflicting distribution packages.
+- It may remove conflicting distribution-provided packages, including `docker.io`, `containerd`, and `runc`. Existing containers managed by those packages may be stopped during migration. Review the impact before running on a host with production containers or Kubernetes/containerd workloads.
+- The script does **not** delete `/var/lib/docker` or `/var/lib/containerd`, and it does not run `apt autoremove`.
+- It does not explicitly restart the Docker service after enabling it, avoiding an unnecessary restart if the service is already running. Package upgrades themselves may still restart services.
+- If run through `sudo`, it attempts to add the invoking non-root user to the `docker` group. If run directly as root, it skips guessing which user should receive access.
+- Membership in the `docker` group grants root-equivalent privileges. Add only trusted users.
+- The daemon must become responsive within 30 seconds. The `hello-world` connectivity test is limited to 120 seconds; if it fails, the script reports a warning separately from the service-readiness check.
+- Docker-published container ports can interact with host firewall rules. Review Docker's [packet filtering and firewalls guidance](https://docs.docker.com/engine/network/packet-filtering-firewalls/) before exposing services.
 
-For Ubuntu:
-
-```text
-[INFO] OS: Ubuntu 24.04.3 LTS
-[INFO] ID: ubuntu
-[INFO] Docker repository OS: ubuntu
-```
-
-For Debian:
-
-```text
-[INFO] OS: Debian GNU/Linux 12 (bookworm)
-[INFO] ID: debian
-[INFO] Docker repository OS: debian
-```
-
-The Docker repository is selected automatically based on the detected OS.
-
-Ubuntu uses:
-
-```text
-https://download.docker.com/linux/ubuntu
-```
-
-Debian uses:
-
-```text
-https://download.docker.com/linux/debian
-```
-
----
-
-## 🔐 Docker Repository
-
-The installer uses the official Docker repository instead of distribution-provided Docker packages.
-
-The repository configuration is created under:
-
-```text
-/etc/apt/sources.list.d/docker.sources
-```
-
-The Docker GPG key is stored at:
-
-```text
-/etc/apt/keyrings/docker.asc
-```
-
-The repository architecture is detected automatically:
-
-```bash
-dpkg --print-architecture
-```
-
----
-
-## 👤 Docker Group
-
-The installer automatically adds the detected user to the `docker` group.
-
-Example:
-
-```text
-[SUCCESS] User added to docker group: username
-```
-
-After installation, log out and log back in.
-
-Alternatively, apply the group membership immediately with:
-
-```bash
-newgrp docker
-```
-
-Then verify:
-
-```bash
-docker ps
-```
-
-You should be able to use Docker without `sudo`.
-
----
-
-## ✅ Verify Installation
-
-Check Docker:
+## Verify the installation
 
 ```bash
 docker --version
-```
-
-Check Docker Compose:
-
-```bash
 docker compose version
-```
-
-Check the Docker service:
-
-```bash
-systemctl status docker
-```
-
-Or:
-
-```bash
 systemctl is-active docker
-```
-
-Expected result:
-
-```text
-active
-```
-
-Check Docker information:
-
-```bash
 docker info
-```
-
----
-
-## 🧪 Docker Test
-
-The installer automatically runs:
-
-```bash
-docker run --rm hello-world
-```
-
-If the test succeeds:
-
-```text
-[SUCCESS] Docker hello-world test passed
-```
-
-If the Docker service is running but the `hello-world` image cannot be pulled, the installer reports a warning instead of treating the entire installation as failed.
-
-This can happen when the server has restricted Internet access or Docker Hub connectivity is unavailable.
-
----
-
-## 🛠️ Useful Docker Commands
-
-Check running containers:
-
-```bash
 docker ps
 ```
 
-Check all containers:
+The Docker service should report `active`. After the script adds a user to the `docker` group, log out and log back in (or start a new group session) before running Docker as that user.
+
+## Useful commands
 
 ```bash
+docker ps
 docker ps -a
-```
-
-List images:
-
-```bash
 docker images
-```
-
-Check Docker information:
-
-```bash
-docker info
-```
-
-Check Docker service:
-
-```bash
-systemctl status docker
-```
-
-Restart Docker:
-
-```bash
-sudo systemctl restart docker
-```
-
-Enable Docker at boot:
-
-```bash
-sudo systemctl enable docker
-```
-
----
-
-## 🐳 Docker Compose
-
-Check Compose:
-
-```bash
-docker compose version
-```
-
-Start a Compose application:
-
-```bash
 docker compose up -d
-```
-
-Stop a Compose application:
-
-```bash
-docker compose down
-```
-
-View Compose logs:
-
-```bash
 docker compose logs -f
-```
-
-List Compose services:
-
-```bash
-docker compose ps
-```
-
----
-
-## 🔧 Troubleshooting
-
-### Docker service is not running
-
-Check the service:
-
-```bash
+docker compose down
 sudo systemctl status docker --no-pager -l
-```
-
-Check recent logs:
-
-```bash
 sudo journalctl -u docker -n 100 --no-pager
 ```
 
-Restart Docker:
+## Files configured
 
-```bash
-sudo systemctl restart docker
-```
+- `/etc/apt/keyrings/docker.asc`
+- `/etc/apt/sources.list.d/docker.sources`
 
-### Permission denied when running Docker
+## Repository
 
-If you see:
-
-```text
-permission denied while trying to connect to the Docker daemon socket
-```
-
-Check your groups:
-
-```bash
-groups
-```
-
-Add your user manually if required:
-
-```bash
-sudo usermod -aG docker "$USER"
-```
-
-Then log out and log back in, or run:
-
-```bash
-newgrp docker
-```
-
-Test:
-
-```bash
-docker ps
-```
-
-### Docker repository problems
-
-Check the repository:
-
-```bash
-cat /etc/apt/sources.list.d/docker.sources
-```
-
-Check the GPG key:
-
-```bash
-ls -l /etc/apt/keyrings/docker.asc
-```
-
-Update APT:
-
-```bash
-sudo apt-get update
-```
-
----
-
-## 📁 Installation Files
-
-The installer creates/configures:
-
-```text
-/etc/apt/keyrings/docker.asc
-/etc/apt/sources.list.d/docker.sources
-```
-
-Docker data is normally stored under:
-
-```text
-/var/lib/docker
-```
-
-Containerd data is normally stored under:
-
-```text
-/var/lib/containerd
-```
-
----
-
-## 🔒 Security Notes
-
-This installer uses:
-
-* Official Docker APT repositories
-* Docker's GPG signing key
-* APT repository signature verification
-* Architecture-specific repository configuration
-* `set -euo pipefail` for safer script execution
-
-The installer does not configure Docker's remote API.
-
-Docker should normally remain accessible through the local Unix socket:
-
-```text
-/var/run/docker.sock
-```
-
-Do not expose the Docker daemon directly to the Internet unless you have a specific security architecture for doing so.
-
----
-
-## 📌 Repository
-
-Project repository:
-
-```text
-https://github.com/yekyawhan/wazuh
-```
-
-Installer location:
-
-```text
-docker/install-docker.sh
-```
-
----
-
-## 📄 License
-
-This project is provided for infrastructure and system administration use.
+- Project: https://github.com/yekyawhan/wazuh
+- Installer: `docker/install-docker.sh`
+- Documentation: `docker/README.md`
