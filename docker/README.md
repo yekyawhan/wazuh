@@ -31,7 +31,7 @@ Refer to the official documentation for current support and architecture details
 ### Option 1 — Download, inspect, and run (recommended)
 
 ```bash
-wget -O install-docker.sh https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/docker/install-docker.sh
+wget -O install-docker.sh https://raw.githubusercontent.com/yekyawhan/wazuh/c6e41482c6d43726078d19006c45c9cbb4f8ee1f/docker/install-docker.sh
 sed -n '1,340p' install-docker.sh
 chmod +x install-docker.sh
 sudo ./install-docker.sh
@@ -42,7 +42,7 @@ sudo ./install-docker.sh
 Use this only after reviewing the script at the linked repository revision.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/docker/install-docker.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/yekyawhan/wazuh/c6e41482c6d43726078d19006c45c9cbb4f8ee1f/docker/install-docker.sh | sudo bash
 ```
 
 ## Safety and operational notes
