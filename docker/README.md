@@ -32,7 +32,7 @@ Refer to the official documentation for current support and architecture details
 
 ```bash
 wget -O install-docker.sh https://raw.githubusercontent.com/yekyawhan/wazuh/git-home/docker/install-docker.sh
-less install-docker.sh
+sed -n '1,340p' install-docker.sh
 chmod +x install-docker.sh
 sudo ./install-docker.sh
 ```
