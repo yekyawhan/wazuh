@@ -1,103 +1,173 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -euo pipefail
+set -Eeuo pipefail
 
-clear
+# Keep non-interactive use safe when TERM is unset.
+if [[ -t 1 && -n "${TERM:-}" ]] && command -v clear >/dev/null 2>&1; then
+    clear
+fi
 
 echo "=========================================="
-echo "      DOCKER INSTALLER (PRODUCTION)"
+echo "      DOCKER INSTALLER (UBUNTU/DEBIAN)"
 echo "=========================================="
-echo ""
+echo
 
 # -----------------------------------
-# Require root
+# Require root and required system tools
 # -----------------------------------
-if [ "$EUID" -ne 0 ]; then
-    echo "[ERROR] Run as root or sudo"
+if (( EUID != 0 )); then
+    echo "[ERROR] Run as root or with sudo."
     exit 1
 fi
 
+for cmd in apt-get apt-cache dpkg dpkg-query systemctl; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "[ERROR] Required command not found: $cmd"
+        exit 1
+    fi
+done
+
 # -----------------------------------
-# Detect OS
+# Detect supported OS
 # -----------------------------------
-if [ ! -f /etc/os-release ]; then
-    echo "[ERROR] Unsupported Linux distribution"
+if [[ ! -r /etc/os-release ]]; then
+    echo "[ERROR] Cannot read /etc/os-release; unsupported Linux distribution."
     exit 1
 fi
 
+# shellcheck source=/etc/os-release
 source /etc/os-release
 
 OS_ID="${ID:-}"
 OS_CODENAME="${VERSION_CODENAME:-}"
+DOCKER_OS=""
+DOCKER_CODENAME=""
 
-echo "[INFO] OS: ${PRETTY_NAME:-Unknown}"
-echo "[INFO] ID: ${OS_ID}"
-echo "[INFO] Codename: ${OS_CODENAME:-Unknown}"
-echo ""
-
-# -----------------------------------
-# Detect supported distribution
-# -----------------------------------
 case "$OS_ID" in
-
     ubuntu)
         DOCKER_OS="ubuntu"
-
-        # Ubuntu derivatives may expose UBUNTU_CODENAME
-        if [ -n "${UBUNTU_CODENAME:-}" ]; then
-            DOCKER_CODENAME="$UBUNTU_CODENAME"
-        else
-            DOCKER_CODENAME="$OS_CODENAME"
-        fi
-
+        DOCKER_CODENAME="${UBUNTU_CODENAME:-$OS_CODENAME}"
         ;;
-
     debian)
         DOCKER_OS="debian"
         DOCKER_CODENAME="$OS_CODENAME"
-
         ;;
-
     *)
-        echo "[ERROR] Unsupported Linux distribution: $OS_ID"
-        echo ""
-        echo "Supported distributions:"
-        echo "  - Ubuntu"
-        echo "  - Debian"
+        echo "[ERROR] Unsupported Linux distribution: ${OS_ID:-unknown}"
+        echo "[INFO] Supported distribution IDs: ubuntu, debian"
         exit 1
         ;;
 esac
 
-# -----------------------------------
-# Validate codename
-# -----------------------------------
-if [ -z "${DOCKER_CODENAME:-}" ]; then
-    echo "[ERROR] Could not determine distribution codename"
-    echo ""
-    echo "OS: $OS_ID"
-    echo "VERSION_CODENAME: ${VERSION_CODENAME:-not-set}"
-    echo "UBUNTU_CODENAME: ${UBUNTU_CODENAME:-not-set}"
+if [[ -z "$DOCKER_CODENAME" ]]; then
+    echo "[ERROR] Could not determine the OS release codename."
+    echo "[INFO] VERSION_CODENAME=${VERSION_CODENAME:-not-set}"
+    echo "[INFO] UBUNTU_CODENAME=${UBUNTU_CODENAME:-not-set}"
     exit 1
 fi
 
-echo "[INFO] Docker repository OS: $DOCKER_OS"
-echo "[INFO] Docker repository codename: $DOCKER_CODENAME"
-echo ""
+ARCH="$(dpkg --print-architecture)"
+if [[ -z "$ARCH" ]]; then
+    echo "[ERROR] Could not determine package architecture."
+    exit 1
+fi
+
+DOCKER_REPO="https://download.docker.com/linux/${DOCKER_OS}"
+DOCKER_GPG="/etc/apt/keyrings/docker.asc"
+DOCKER_SOURCE_FILE="/etc/apt/sources.list.d/docker.sources"
+
+printf '[INFO] OS: %s\n' "${PRETTY_NAME:-Unknown}"
+printf '[INFO] ID: %s\n' "$OS_ID"
+printf '[INFO] Codename: %s\n' "$DOCKER_CODENAME"
+printf '[INFO] Docker repository: %s\n' "$DOCKER_REPO"
+printf '[INFO] Architecture: %s\n\n' "$ARCH"
+
+echo "[WARNING] This script may remove conflicting distribution-provided Docker/containerd packages."
+echo "[WARNING] Existing containers managed by those packages may be stopped during migration."
+echo "[INFO] Docker data directories are not deleted by this script."
+echo
 
 # -----------------------------------
-# Remove stale Docker APT repository files
+# Remove stale repository definitions from previous installer versions
 # -----------------------------------
-# An old docker.list/docker.sources may point to the wrong distribution
-# (for example, Ubuntu's repository on Debian) and break the first apt-get update.
+# The previous script version could leave Ubuntu's repository configured on Debian.
 echo "[+] Removing stale Docker repository configuration..."
-rm -f /etc/apt/sources.list.d/docker.list
-rm -f /etc/apt/sources.list.d/docker.sources
+rm -f /etc/apt/sources.list.d/docker.list "$DOCKER_SOURCE_FILE"
 
 # -----------------------------------
-# Remove old Docker packages
+# Install prerequisites
 # -----------------------------------
-echo "[+] Removing old Docker packages..."
+echo "[+] Updating APT package lists..."
+apt-get update
 
+echo "[+] Installing required dependencies..."
+DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gnupg
+
+# Validate the suite before writing a new APT source file. This prevents an
+# unsupported codename from leaving a broken Docker repository configured.
+echo "[+] Checking Docker repository release metadata..."
+if ! curl --fail --silent --show-error --location \
+    --connect-timeout 10 --max-time 30 --retry 2 \
+    --output /dev/null \
+    "${DOCKER_REPO}/dists/${DOCKER_CODENAME}/Release"; then
+    echo "[ERROR] Docker repository metadata is unavailable for ${DOCKER_OS}/${DOCKER_CODENAME}."
+    echo "[INFO] The release may be unsupported, or this server may not be able to reach download.docker.com."
+    echo "[INFO] No new Docker APT source file has been written."
+    exit 1
+fi
+
+# -----------------------------------
+# Set up Docker GPG key (refresh on every run)
+# -----------------------------------
+echo "[+] Downloading Docker GPG key..."
+install -m 0755 -d /etc/apt/keyrings
+key_tmp="$(mktemp /etc/apt/keyrings/docker.asc.XXXXXX)"
+if ! curl -fsSL "${DOCKER_REPO}/gpg" -o "$key_tmp"; then
+    rm -f "$key_tmp"
+    echo "[ERROR] Failed to download Docker's GPG key from ${DOCKER_REPO}/gpg"
+    exit 1
+fi
+chmod 0644 "$key_tmp"
+mv -f "$key_tmp" "$DOCKER_GPG"
+
+# -----------------------------------
+# Configure Docker's official repository atomically
+# -----------------------------------
+echo "[+] Configuring Docker APT repository..."
+install -m 0755 -d /etc/apt/sources.list.d
+source_tmp="$(mktemp /etc/apt/sources.list.d/docker.sources.XXXXXX)"
+cat > "$source_tmp" <<EOF_REPO
+Types: deb
+URIs: ${DOCKER_REPO}
+Suites: ${DOCKER_CODENAME}
+Components: stable
+Architectures: ${ARCH}
+Signed-By: ${DOCKER_GPG}
+EOF_REPO
+chmod 0644 "$source_tmp"
+mv -f "$source_tmp" "$DOCKER_SOURCE_FILE"
+
+# -----------------------------------
+# Update package lists and verify Docker packages are available
+# -----------------------------------
+echo "[+] Refreshing APT package lists with Docker repository..."
+apt-get update
+
+DOCKER_CANDIDATE="$(apt-cache policy docker-ce | awk '/Candidate:/ { print $2; exit }')"
+if [[ -z "$DOCKER_CANDIDATE" || "$DOCKER_CANDIDATE" == "(none)" ]]; then
+    echo "[ERROR] Docker Engine is not available for ${DOCKER_OS}/${DOCKER_CODENAME}/${ARCH}."
+    echo "[INFO] Check Docker's supported OS releases and architectures:"
+    echo "       https://docs.docker.com/engine/install/${DOCKER_OS}/"
+    exit 1
+fi
+printf '[INFO] Docker Engine candidate: %s\n\n' "$DOCKER_CANDIDATE"
+
+# -----------------------------------
+# Remove conflicting distro packages, but only if installed
+# This occurs only after repository metadata and package availability are valid.
+# -----------------------------------
+echo "[+] Checking for conflicting Docker packages..."
+conflicting_packages=()
 for pkg in \
     docker.io \
     docker-doc \
@@ -108,78 +178,24 @@ for pkg in \
     containerd \
     runc
 do
-    apt-get remove -y "$pkg" >/dev/null 2>&1 || true
+    package_status="$(dpkg-query -W -f='${db:Status-Status}' "$pkg" 2>/dev/null || true)"
+    if [[ "$package_status" == "installed" ]]; then
+        conflicting_packages+=("$pkg")
+    fi
 done
 
-# -----------------------------------
-# Install dependencies
-# -----------------------------------
-echo "[+] Installing dependencies..."
-
-apt-get update -y
-
-apt-get install -y \
-    ca-certificates \
-    curl \
-    gnupg
-
-# -----------------------------------
-# Setup Docker GPG
-# -----------------------------------
-echo "[+] Setting up Docker GPG key..."
-
-install -m 0755 -d /etc/apt/keyrings
-
-DOCKER_GPG="/etc/apt/keyrings/docker.asc"
-
-if [ ! -f "$DOCKER_GPG" ]; then
-
-    curl -fsSL \
-        "https://download.docker.com/linux/${DOCKER_OS}/gpg" \
-        -o "$DOCKER_GPG"
-
+if (( ${#conflicting_packages[@]} > 0 )); then
+    printf '[INFO] Removing conflicting packages: %s\n' "${conflicting_packages[*]}"
+    DEBIAN_FRONTEND=noninteractive apt-get remove -y "${conflicting_packages[@]}"
 else
-
-    echo "[INFO] Docker GPG already exists, skipping..."
-
+    echo "[INFO] No conflicting distribution packages found."
 fi
 
-chmod a+r "$DOCKER_GPG"
-
 # -----------------------------------
-# Setup Docker repository
+# Install Docker Engine and plugins
 # -----------------------------------
-echo "[+] Adding Docker repository..."
-
-ARCH=$(dpkg --print-architecture)
-
-DOCKER_REPO="https://download.docker.com/linux/${DOCKER_OS}"
-
-cat > /etc/apt/sources.list.d/docker.sources <<EOF
-Types: deb
-URIs: ${DOCKER_REPO}
-Suites: ${DOCKER_CODENAME}
-Components: stable
-Architectures: ${ARCH}
-Signed-By: ${DOCKER_GPG}
-EOF
-
-echo "[INFO] Docker repository:"
-echo "       ${DOCKER_REPO}"
-echo "[INFO] Architecture:"
-echo "       ${ARCH}"
-echo "[INFO] Suite:"
-echo "       ${DOCKER_CODENAME}"
-echo ""
-
-# -----------------------------------
-# Install Docker
-# -----------------------------------
-echo "[+] Installing Docker Engine..."
-
-apt-get update -y
-
-apt-get install -y \
+echo "[+] Installing Docker Engine and plugins..."
+DEBIAN_FRONTEND=noninteractive apt-get install -y \
     docker-ce \
     docker-ce-cli \
     containerd.io \
@@ -187,127 +203,114 @@ apt-get install -y \
     docker-compose-plugin
 
 # -----------------------------------
-# Add user to docker group
+# Add the invoking sudo user to docker group when identifiable
 # -----------------------------------
-echo ""
+echo
 echo "[+] Configuring Docker permissions..."
-
-REAL_USER="${SUDO_USER:-${USER:-root}}"
-
-if id "$REAL_USER" &>/dev/null; then
-
+REAL_USER="${SUDO_USER:-}"
+if [[ -n "$REAL_USER" && "$REAL_USER" != "root" ]] && id "$REAL_USER" >/dev/null 2>&1; then
+    if ! getent group docker >/dev/null 2>&1; then
+        echo "[ERROR] Docker group does not exist after package installation."
+        exit 1
+    fi
     usermod -aG docker "$REAL_USER"
-
-    echo "[SUCCESS] User added to docker group: $REAL_USER"
-    echo ""
-    echo "[IMPORTANT] Logout/login OR run:"
-    echo "newgrp docker"
-
+    echo "[SUCCESS] Added user to docker group: $REAL_USER"
+    echo "[IMPORTANT] Log out and log back in for group membership to take effect, or run: newgrp docker"
+    echo "[SECURITY] Membership in the docker group grants root-equivalent privileges."
 else
-
-    echo "[WARNING] Could not determine real user"
-
+    echo "[INFO] No non-root SUDO_USER was detected; skipping automatic docker-group changes."
+    echo "[INFO] Root can administer Docker directly. Add a trusted user manually if required."
 fi
 
 # -----------------------------------
-# Enable/start Docker service
+# Enable/start Docker without an unnecessary explicit restart
 # -----------------------------------
-echo ""
-echo "[+] Starting Docker..."
-
-systemctl daemon-reload
-systemctl enable docker --now
-systemctl restart docker
-
-sleep 3
+echo
+echo "[+] Enabling and starting Docker..."
+systemctl enable --now docker
 
 # -----------------------------------
-# Verify Docker service
+# Wait for Docker daemon readiness
 # -----------------------------------
-echo ""
-echo "[+] Checking Docker service..."
+echo "[+] Waiting for Docker daemon..."
+docker_ready=0
+for attempt in {1..30}; do
+    if docker info >/dev/null 2>&1; then
+        docker_ready=1
+        break
+    fi
+    sleep 1
+done
 
-if systemctl is-active --quiet docker; then
-
-    echo "[SUCCESS] Docker service is running"
-
-else
-
-    echo "[ERROR] Docker service failed"
-    echo ""
-    systemctl status docker --no-pager -l
+if (( docker_ready == 0 )); then
+    echo "[ERROR] Docker service did not become ready within 30 seconds."
+    systemctl status docker --no-pager -l || true
+    journalctl -u docker -n 80 --no-pager || true
     exit 1
-
 fi
 
-# -----------------------------------
-# Verify Docker installation
-# -----------------------------------
-echo ""
-echo "[+] Checking Docker version..."
+echo "[SUCCESS] Docker daemon is responding."
 
+# -----------------------------------
+# Verify installed versions
+# -----------------------------------
+echo
+echo "[+] Verifying Docker versions..."
 docker --version
 docker compose version
 
 # -----------------------------------
-# Docker information
+# Run a bounded hello-world test
 # -----------------------------------
-echo ""
-echo "[+] Docker system information..."
-
-docker info >/dev/null 2>&1 || true
-
-# -----------------------------------
-# Hello World test
-# -----------------------------------
-echo ""
-echo "[+] Running hello-world test..."
-
-if docker run --rm hello-world >/dev/null 2>&1; then
-
-    echo "[SUCCESS] Docker hello-world test passed"
-
+echo
+echo "[+] Running hello-world test (maximum 120 seconds)..."
+if command -v timeout >/dev/null 2>&1; then
+    if timeout 120 docker run --rm hello-world; then
+        HELLO_WORLD_OK=1
+    else
+        HELLO_WORLD_OK=0
+    fi
 else
-
-    echo "[WARNING] hello-world test failed"
-    echo "[INFO] Docker service is running, but image test could not complete"
-
+    if docker run --rm hello-world; then
+        HELLO_WORLD_OK=1
+    else
+        HELLO_WORLD_OK=0
+    fi
 fi
 
 # -----------------------------------
-# Final output
+# Final summary
 # -----------------------------------
-echo ""
+echo
 echo "=========================================="
-echo "[DONE] Docker installed successfully"
+if (( HELLO_WORLD_OK == 1 )); then
+    echo "[DONE] Docker installed and verified successfully"
+else
+    echo "[DONE] Docker Engine is installed and running; hello-world test did not complete."
+    echo "[WARNING] Check Docker Hub connectivity and daemon logs if the test failed."
+fi
 echo "=========================================="
-
-echo ""
+echo
 echo "System:"
-echo "  OS           : ${PRETTY_NAME:-Unknown}"
-echo "  Docker Repo  : ${DOCKER_OS}"
-echo "  Codename     : ${DOCKER_CODENAME}"
-echo "  Architecture : ${ARCH}"
-
-echo ""
+printf '  OS           : %s\n' "${PRETTY_NAME:-Unknown}"
+printf '  Docker Repo  : %s\n' "$DOCKER_REPO"
+printf '  Codename     : %s\n' "$DOCKER_CODENAME"
+printf '  Architecture : %s\n' "$ARCH"
+echo
 echo "Docker Version:"
 docker --version
-
-echo ""
+echo
 echo "Docker Compose:"
 docker compose version
-
-echo ""
+echo
 echo "Docker Service:"
 systemctl is-active docker
-
-echo ""
+echo
 echo "Useful commands:"
 echo "  docker ps"
 echo "  docker images"
 echo "  docker compose up -d"
 echo "  docker compose down"
 echo "  docker info"
-
-echo ""
+echo
 echo "=========================================="
