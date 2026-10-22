@@ -153,9 +153,19 @@ mv -f "$source_tmp" "$DOCKER_SOURCE_FILE"
 echo "[+] Refreshing APT package lists with Docker repository..."
 apt-get update
 
-DOCKER_CANDIDATE="$(apt-cache policy docker-ce | awk '/Candidate:/ { print $2; exit }')"
+if ! DOCKER_POLICY="$(apt-cache policy docker-ce)"; then
+    echo "[ERROR] Failed to query APT policy for docker-ce."
+    exit 1
+fi
+
+# Do not use awk ... exit here: with set -o pipefail, an early-exiting reader
+# can cause the producer to receive SIGPIPE and abort the installer.
+DOCKER_CANDIDATE="$(printf '%s\n' "$DOCKER_POLICY" | sed -n 's/^[[:space:]]*Candidate:[[:space:]]*//p')"
+
 if [[ -z "$DOCKER_CANDIDATE" || "$DOCKER_CANDIDATE" == "(none)" ]]; then
     echo "[ERROR] Docker Engine is not available for ${DOCKER_OS}/${DOCKER_CODENAME}/${ARCH}."
+    echo "[INFO] APT policy output:"
+    printf '%s\n' "$DOCKER_POLICY"
     echo "[INFO] Check Docker's supported OS releases and architectures:"
     echo "       https://docs.docker.com/engine/install/${DOCKER_OS}/"
     exit 1
