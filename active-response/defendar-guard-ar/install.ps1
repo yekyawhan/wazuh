@@ -118,7 +118,11 @@ function Register-GuardTask {
         '    <Hidden>false</Hidden>'
         '    <RunOnlyIfIdle>false</RunOnlyIfIdle>'
         '    <WakeToRun>false</WakeToRun>'
-        '    <ExecutionTimeLimit>PT2M</ExecutionTimeLimit>'
+        # PT0S = no time limit. PT2M made Task Scheduler hard-kill the
+        # watchdogs after 2 minutes (verified live: task LastTaskResult=267014,
+        # SCHED_S_TASK_TERMINATED), which is why the poll layer silently
+        # died on every boot.
+        '    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>'
         '    <Priority>5</Priority>'
         '  </Settings>'
         '  <Actions Context="Author">'
