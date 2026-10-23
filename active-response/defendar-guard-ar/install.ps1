@@ -124,6 +124,8 @@ function Register-GuardTask {
         # died on every boot.
         '    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>'
         '    <Priority>5</Priority>'
+        # If the poll loop ever crashes, Task Scheduler brings it back.
+        '    <RestartOnFailure><Interval>PT1M</Interval><Count>3</Count></RestartOnFailure>'
         '  </Settings>'
         '  <Actions Context="Author">'
         '    <Exec>'
@@ -228,7 +230,17 @@ $registered = @()
 #    preference flips that do NOT log an event. Always-on.
 $bootTrigger = '<BootTrigger><Enabled>true</Enabled></BootTrigger>'
 $r1 = Register-GuardTask -Name "Defender-Guard-Service-Watch" -Script $psSvc -TriggerXml $bootTrigger
-if ($r1) { $registered += $r1 }
+if ($r1) {
+    $registered += $r1
+    # BootTrigger alone means the watchdog does not run until the next reboot.
+    # Start it now so protection is live from this moment, not after a restart.
+    try {
+        Start-ScheduledTask -TaskName $r1 -ErrorAction Stop
+        Write-Host "  [OK] Service-Watch started now (not waiting for reboot)." -ForegroundColor Green
+    } catch {
+        Write-Host "  [!!] could not start Service-Watch: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
 
 # 2) Event-watcher: fires on Defender state-change events (5001/5010/5012).
 #    MUST use the QueryList form with an explicit channel Path. A bare
