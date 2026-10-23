@@ -184,7 +184,7 @@ After it finishes, do the **manager-side** config above, then restart the agent 
 | `reenable-defender.cmd` | Wrapper Wazuh calls. Prefers PowerShell 7, falls back to Windows PowerShell 5.1. |
 | `reenable-defender.ps1` | Does the actual work. AR mode (reads JSON from stdin via `ReadLine()`) or standalone (no stdin). |
 | `enable-tamper-protection.ps1` | Layer-0 helper: turns Tamper Protection ON by driving the Windows Security UI (`Enable-TamperProtectionBestEffort`), plus `Start-DefenderGuardTamperInSession` for the session-0 AR path. Dot-sourced by the AR, the install, and the audit script. |
-| `watchdog-service.ps1` | 1 s poll: keeps `WinDefend` alive + re-issues `Set-MpPreference -DisableRealtimeMonitoring $false`. |
+| `watchdog-service.ps1` | 1 s poll: keeps `WinDefend` alive + checks ALL FIVE protections, re-issuing the full restore on any drift (RTP/behavior/IOAV, `MAPSReporting=2`, `SubmitSamplesConsent=3`, `PerformanceModeStatus=1`, `DisableBlockAtFirstSeen=False`) and attempting a rate-limited Tamper enable when it is OFF. |
 | `enforce-tamper-protection.ps1` | Audit + re-enforce; attempts the enable via the shared helper, then surfaces GUI/Intune/GPO enable path if it did not stick. |
 | `tamper-protection-policy.xml` | Ready-to-paste Intune OMA-URI + GPO ADMX policy for Tamper Protection. |
 | `install.ps1` | One-shot installer. Downloads, places, registers both Scheduled Tasks, imports publisher cert, attempts Tamper enable. |
